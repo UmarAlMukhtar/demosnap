@@ -1,3 +1,5 @@
+mod capture;
+
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello from Rust!, {}", name)
