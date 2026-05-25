@@ -2,11 +2,13 @@
 
 use std::path::PathBuf;
 
+// This module is a placeholder for the actual capture implementation.
 pub struct RecordingSession {
     pub output_path: PathBuf,
     pub start_time: std::time::Instant,
 }
 
+// Start a new recording session and return its details.
 pub fn start() -> Result<RecordingSession, String> {
     let output_path = get_temp_path();
 
@@ -18,6 +20,8 @@ pub fn start() -> Result<RecordingSession, String> {
     })
 }
 
+
+// Stop the recording session and return the path to the recorded file.
 pub fn stop(session: RecordingSession) -> Result<String, String> {
     let duration = session.start_time.elapsed();
     log::info!("Capture Stopped, duration: {:.1}s", duration.as_secs_f32());
@@ -25,6 +29,8 @@ pub fn stop(session: RecordingSession) -> Result<String, String> {
     Ok(session.output_path.to_string_lossy().to_string())
 }
 
+
+// Generate a temporary file path for the recording.
 fn get_temp_path() -> PathBuf {
     let tmp = std::env::temp_dir().join("demosnap");
     std::fs::create_dir_all(&tmp).ok();

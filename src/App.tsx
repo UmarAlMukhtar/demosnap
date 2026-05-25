@@ -1,49 +1,49 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
+import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 
-function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+type ClickEvent = {
+  timestamp_ms: number;
+  x: number;
+  y: number;
+  event_type: "LeftDown" | "LeftUp" | "Move";
+};
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
+function App() {
+  const [clickLog, setClickLog] = useState<ClickEvent[]>([]);
+  const [status, setStatus] = useState("Click anywhere in the panel to log it.");
+
+  useEffect(() => {
+    invoke<ClickEvent[]>("get_click_log")
+      .then(setClickLog)
+      .catch(() => setStatus("Click log backend is not ready yet."));
+  }, []);
+
+  async function logClick(event: React.MouseEvent<HTMLElement>) {
+    const updatedLog = await invoke<ClickEvent[]>("record_click", {
+      x: Math.round(event.clientX),
+      y: Math.round(event.clientY),
+    });
+
+    setClickLog(updatedLog);
+    const latest = updatedLog[updatedLog.length - 1];
+    setStatus(`Logged click at (${latest.x}, ${latest.y}). Total: ${updatedLog.length}`);
   }
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
-
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
+    <main className="container" onClick={logClick}>
+      <h1>Click Log</h1>
+      <p>{status}</p>
+      <section>
+        <h2>Recent clicks</h2>
+        <ul>
+          {clickLog.slice(-5).reverse().map((event) => (
+            <li key={`${event.timestamp_ms}-${event.x}-${event.y}`}>
+              {event.event_type} at ({event.x}, {event.y})
+            </li>
+          ))}
+        </ul>
+      </section>
     </main>
   );
 }
