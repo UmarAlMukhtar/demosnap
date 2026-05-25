@@ -50,7 +50,7 @@ See [PROGRESS.md](./PROGRESS.md) for detailed tracking.
 
 | Module | Status | Next Steps |
 |--------|--------|-----------|
-| Screen Capture | ⚠️ Live desktop capture started | Add region selection and validate stability |
+| Screen Capture | ⚠️ Live desktop capture with drag-to-select region capture | Validate stability and tuning |
 | Mouse/Click Logging | ⚠️ Partial (test only) | Implement Win32 hooks for real events |
 | Audio Capture | ❌ Not started | WASAPI integration |
 | Video Export | ❌ Not started | FFmpeg pipeline |
@@ -133,7 +133,7 @@ cargo tauri build
 - **Desktop Shell:** [Tauri v2](https://tauri.app/) (lightweight cross-platform framework)
 - **Frontend:** React 19 + TypeScript 5.8
 - **Backend:** Rust (performance, memory safety, system access)
-- **Screen Capture:** Rust now launches ffmpeg desktop capture on recording start; region selection and tuning are still pending
+- **Screen Capture:** Rust now launches ffmpeg desktop capture on recording start and supports drag-to-select regions; stability and tuning are still pending
 - **Video Encoding:** FFmpeg via [`ffmpeg-next`](https://github.com/zmwang622/ffmpeg-next)
 - **State Management:** [Zustand](https://github.com/pmndrs/zustand) (lightweight, simple)
 - **Subtitles:** [Whisper.cpp](https://github.com/ggerganov/whisper.cpp) (local, no internet)

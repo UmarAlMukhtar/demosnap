@@ -32,10 +32,10 @@ TOTAL V1.0         █░░░░░░░░░░░░░░░░░░░�
 
 | Requirement | Task | Status | Notes |
 |---|---|---|---|
-| REC-01 | Record primary display at 60fps | ⚠️ IN PROGRESS | Live desktop capture loop added; needs manual validation and tuning |
-| REC-02 | Record selected region | ❌ NOT STARTED | Depends on capture impl + region UI |
+| REC-01 | Record primary display at 60fps | ⚠️ IN PROGRESS | Live desktop capture loop added; region capture is now wired through the command path |
+| REC-02 | Record selected region | ⚠️ IN PROGRESS | Drag-to-select region overlay is wired to ffmpeg; needs validation and polish |
 | REC-06 | Pause/resume during recording | ❌ NOT STARTED | State management needed |
-| REC-08 | Recording indicator UI | ⚠️ PARTIAL | Basic indicator exists; needs polish |
+| REC-08 | Recording indicator UI | ✅ DONE | Live recording pill and elapsed timer shown while recording |
 | INP-01 | Log left clicks with coordinates | ✅ DONE | Test click logging working; need real hook |
 | INP-03 | Log cursor movement at 60hz | ❌ NOT STARTED | Requires Win32 `SetWindowsHookEx` |
 | INP-04 | Store click log + video in project | ⚠️ PARTIAL | Click log in memory; persistence not implemented |
@@ -45,6 +45,9 @@ TOTAL V1.0         █░░░░░░░░░░░░░░░░░░░�
 - [x] Basic recording window UI skeleton
 - [x] Recording sidebar and button polish
 - [x] Screen capture backend (live desktop capture loop wired)
+- [x] Region selection controls wired into capture start path
+- [x] Recording hover feedback and pointer cursor restored
+- [x] Live recording timer and status indicators
 - [x] Click logging data structures
 - [ ] Click logging persistence to JSON
 - [ ] Project file I/O
@@ -130,6 +133,8 @@ All phases blocked on M3 completion.
 ### What Works ✅
 - React + TypeScript UI scaffold
 - Light recording-focused UI with sidebar
+- Recording button hover feedback and pointer cursor behavior
+- Live elapsed recording timer and active-state pill
 - Click event data structures (Rust)
 - Test click logging (simulated mouse events)
 - Basic Tauri IPC bridge (invoke/listen)
@@ -137,7 +142,7 @@ All phases blocked on M3 completion.
 - Project folder structure concept
 
 ### What's Stubbed 🟡
-- `capture.rs`: Starts live desktop capture, but still needs region selection and validation
+- `capture.rs`: Starts live desktop capture and now accepts a capture rectangle, but still needs validation and tuning
 - Recording start/stop: Session plumbing exists, using ffmpeg desktop capture
 - Project file format: Structure defined, no I/O implemented
 - Export pipeline: No FFmpeg integration
@@ -157,8 +162,8 @@ All phases blocked on M3 completion.
 ## Next Steps (Priorities)
 
 ### Immediate (This Week)
-1. Add region selection UI for recording area
-2. Test frame rates and CPU usage
+1. Test frame rates and CPU usage with region capture
+2. Polish region selection controls and validation
 3. Persist click log to project files
 4. Validate recording output on longer sessions
 
@@ -180,7 +185,7 @@ All phases blocked on M3 completion.
 
 | Issue | Severity | Impact | Mitigation |
 |---|---|---|---|
-| No real screen capture implemented | 🔴 Critical | Blocks entire M1 | Start `scap` integration immediately |
+| Capture tuning still needed | 🟡 High | Region/fullscreen recording needs validation | Test `gdigrab` region args and frame stability |
 | No real mouse hook | 🔴 Critical | Click logging won't work on real usage | Use Win32 API; test thoroughly |
 | No persistence layer | 🟡 High | Projects lost on close | Implement JSON serialization + file I/O |
 | Frame dropping risk at 60fps | 🟡 High | Poor user experience | Profile early; may need buffering strategy |
@@ -221,7 +226,7 @@ All phases blocked on M3 completion.
 | React 19 | UI framework | ✅ Setup | Working |
 | TypeScript 5.8 | Type safety | ✅ Setup | Working |
 | Vite | Bundler | ✅ Setup | Working |
-| Screen capture session plumbing | Project scaffolding | ⚠️ Partial | Live desktop capture added; region selection and validation pending |
+| Screen capture session plumbing | Project scaffolding | ⚠️ Partial | Live desktop capture added; region selection, validation, and timer polish pending |
 | `ffmpeg-next` | Video encoding | ❌ TBD | Not yet added to Cargo.toml |
 | Win32 API | Mouse hooks | ❌ TBD | Not yet integrated |
 | WASAPI | Audio capture | ❌ TBD | Not yet integrated |
@@ -236,6 +241,7 @@ All phases blocked on M3 completion.
 - [ ] Integration tests for IPC (Tauri commands)
 - [ ] System test: record screen → export → verify video
 - [ ] Performance test: 60fps frame capture
+- [ ] UI test: region overlay selection aligns to capture output
 - [ ] Audio sync test: video + microphone audio
 - [ ] Export performance test: 5-min 1080p < 3 min
 - [ ] Offline mode test: no network calls

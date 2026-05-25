@@ -35,14 +35,17 @@ fn get_click_log(log: State<'_, input::ClickLog>) -> Vec<input::ClickEvent> {
 }
 
 #[tauri::command]
-fn start_recording(recording: State<'_, capture::RecordingState>) -> Result<String, String> {
+fn start_recording(
+    recording: State<'_, capture::RecordingState>,
+    capture_region: Option<capture::RecordingRegion>,
+) -> Result<String, String> {
     let mut active_session = recording.lock().unwrap();
 
     if active_session.is_some() {
         return Err("A recording is already in progress.".to_string());
     }
 
-    let session = capture::start()?;
+    let session = capture::start(capture_region)?;
     let project_dir = session.project_dir.to_string_lossy().to_string();
     *active_session = Some(session);
 

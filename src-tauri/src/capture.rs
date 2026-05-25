@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
@@ -11,11 +11,20 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 pub type RecordingState = Mutex<Option<RecordingSession>>;
 
+#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
+pub struct RecordingRegion {
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
+}
+
 #[derive(Debug)]
 pub struct RecordingSession {
     pub project_dir: PathBuf,
     pub video_path: PathBuf,
     pub manifest_path: PathBuf,
+    pub capture_region: Option<RecordingRegion>,
     pub start_time: Instant,
     pub created_at_ms: u64,
     ffmpeg_child: Child,
@@ -28,16 +37,17 @@ struct RecordingManifest {
     updated_at_ms: u64,
     status: String,
     video_file: String,
+    capture_region: Option<RecordingRegion>,
     duration_ms: Option<u128>,
 }
 
 // Start a new recording session and prepare the project folder.
-pub fn start() -> Result<RecordingSession, String> {
+pub fn start(capture_region: Option<RecordingRegion>) -> Result<RecordingSession, String> {
     let project_dir = get_temp_project_dir();
     fs::create_dir_all(&project_dir).map_err(|error| error.to_string())?;
 
     let video_path = project_dir.join("video.mp4");
-    let ffmpeg_child = spawn_screen_capture(&video_path)?;
+    let ffmpeg_child = spawn_screen_capture(&video_path, capture_region)?;
 
     let manifest_path = project_dir.join("project.json");
     let created_at_ms = now_ms();
@@ -49,6 +59,7 @@ pub fn start() -> Result<RecordingSession, String> {
             updated_at_ms: created_at_ms,
             status: "recording".to_string(),
             video_file: "video.mp4".to_string(),
+            capture_region,
             duration_ms: None,
         },
     )?;
@@ -58,6 +69,7 @@ pub fn start() -> Result<RecordingSession, String> {
         project_dir,
         video_path,
         manifest_path,
+        capture_region,
         start_time: Instant::now(),
         created_at_ms,
         ffmpeg_child,
@@ -85,6 +97,7 @@ pub fn stop(session: RecordingSession) -> Result<String, String> {
                 .unwrap_or_default()
                 .to_string_lossy()
                 .to_string(),
+            capture_region: session.capture_region,
             duration_ms: Some(duration.as_millis()),
         },
     )?;
@@ -92,17 +105,39 @@ pub fn stop(session: RecordingSession) -> Result<String, String> {
     Ok(session.project_dir.to_string_lossy().to_string())
 }
 
-fn spawn_screen_capture(output_path: &PathBuf) -> Result<Child, String> {
-    Command::new("ffmpeg")
+fn spawn_screen_capture(
+    output_path: &PathBuf,
+    capture_region: Option<RecordingRegion>,
+) -> Result<Child, String> {
+    let mut command = Command::new("ffmpeg");
+    let capture_region = capture_region.map(normalize_capture_region);
+
+    command
         .arg("-y")
         .arg("-f")
         .arg("gdigrab")
         .arg("-framerate")
         .arg("60")
+        .arg("-draw_mouse")
+        .arg("1");
+
+    if let Some(region) = capture_region {
+        if region.width <= 0 || region.height <= 0 {
+            return Err("Capture region width and height must be greater than zero.".to_string());
+        }
+
+        command
+            .arg("-offset_x")
+            .arg(region.x.to_string())
+            .arg("-offset_y")
+            .arg(region.y.to_string())
+            .arg("-video_size")
+            .arg(format!("{}x{}", region.width, region.height));
+    }
+
+    command
         .arg("-i")
         .arg("desktop")
-        .arg("-draw_mouse")
-        .arg("1")
         .arg("-vcodec")
         .arg("libx264")
         .arg("-preset")
@@ -115,6 +150,15 @@ fn spawn_screen_capture(output_path: &PathBuf) -> Result<Child, String> {
         .stderr(Stdio::inherit())
         .spawn()
         .map_err(|error| error.to_string())
+}
+
+fn normalize_capture_region(region: RecordingRegion) -> RecordingRegion {
+    RecordingRegion {
+        x: region.x,
+        y: region.y,
+        width: region.width - (region.width % 2),
+        height: region.height - (region.height % 2),
+    }
 }
 
 fn stop_screen_capture(mut child: Child) -> Result<(), String> {

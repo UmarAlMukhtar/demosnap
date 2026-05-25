@@ -35,6 +35,11 @@ code {
 button {
   border: 0;
   outline: none;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
 }
 
 .app-shell {
@@ -83,10 +88,15 @@ button {
     0 8px 30px rgba(15, 23, 42, 0.08);
 }
 
+.sidebar-tab:hover {
+  background: linear-gradient(135deg, #edf2f7 0%, #e2e8f0 100%);
+}
+
 .workspace {
   display: grid;
   place-items: center;
   min-width: 0;
+  position: relative;
   padding: 24px;
 }
 
@@ -145,6 +155,7 @@ button {
 
 .record-button:hover {
   transform: translateY(-2px) scale(1.01);
+  background: radial-gradient(circle at 30% 25%, #f57373 0%, #d92a2a 45%, #ae1010 100%);
   filter: saturate(1.04);
 }
 
@@ -197,6 +208,149 @@ button {
   color: #4b5563;
 }
 
+.recording-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.recording-pill {
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.86);
+  color: #475569;
+  font-size: 0.84rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.18);
+}
+
+.recording-pill.live {
+  color: #b91c1c;
+  background: rgba(254, 242, 242, 0.96);
+}
+
+.recording-pill.idle {
+  color: #475569;
+}
+
+.recording-time {
+  min-width: 4.5rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.capture-settings {
+  width: min(100%, 420px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.16);
+}
+
+.capture-mode {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.capture-toggle {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.85);
+  color: #374151;
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.18);
+}
+
+.capture-toggle.active {
+  color: #111827;
+  background: linear-gradient(135deg, #ffffff 0%, #edf2f7 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(148, 163, 184, 0.22),
+    0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+.capture-toggle:hover:not(:disabled) {
+  background: rgba(226, 232, 240, 0.95);
+}
+
+.capture-toggle:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.region-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  cursor: crosshair;
+  background: rgba(15, 23, 42, 0.14);
+  backdrop-filter: blur(2px);
+}
+
+.region-overlay-panel {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(100%, 320px);
+  padding: 14px 16px;
+  border-radius: 18px;
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.12);
+}
+
+.region-overlay-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.region-overlay-copy {
+  margin: 0;
+  color: #475569;
+}
+
+.region-overlay-cancel {
+  align-self: flex-start;
+  padding: 10px 14px;
+  border-radius: 12px;
+  color: #ffffff;
+  background: #1f2937;
+}
+
+.region-overlay-cancel:hover {
+  background: #111827;
+}
+
+.region-selection-box {
+  position: absolute;
+  border: 2px solid #2563eb;
+  background: rgba(37, 99, 235, 0.14);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35) inset;
+}
+
+.region-selection-label {
+  position: absolute;
+  top: -28px;
+  left: 0;
+  padding: 4px 8px;
+  border-radius: 999px;
+  color: #ffffff;
+  background: #1d4ed8;
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .record-status {
   display: flex;
   flex-direction: column;
@@ -204,9 +358,11 @@ button {
   align-items: center;
   color: #6b7280;
   font-size: 0.95rem;
+  min-height: 3.75rem;
 }
 
 .record-path {
+  display: block;
   padding: 0;
   border-radius: 0;
   background: transparent;
@@ -220,6 +376,10 @@ button {
 
 .record-path:hover {
   color: #1d4ed8;
+}
+
+.record-path:hover {
+  background: rgba(219, 234, 254, 0.8);
 }
 
 @media (max-width: 720px) {
@@ -280,5 +440,19 @@ button {
 
   .record-title {
     font-size: 1.5rem;
+  }
+
+  .recording-metrics {
+    gap: 6px;
+  }
+
+  .capture-settings {
+    width: 100%;
+  }
+
+  .region-overlay-panel {
+    top: 12px;
+    left: 12px;
+    width: min(100% - 24px, 320px);
   }
 }
