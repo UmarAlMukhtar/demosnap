@@ -32,7 +32,7 @@ TOTAL V1.0         █░░░░░░░░░░░░░░░░░░░�
 
 | Requirement | Task | Status | Notes |
 |---|---|---|---|
-| REC-01 | Record primary display at 60fps | ❌ NOT STARTED | Needs `scap` integration + DXGI capture |
+| REC-01 | Record primary display at 60fps | ⚠️ IN PROGRESS | Live desktop capture loop added; needs manual validation and tuning |
 | REC-02 | Record selected region | ❌ NOT STARTED | Depends on capture impl + region UI |
 | REC-06 | Pause/resume during recording | ❌ NOT STARTED | State management needed |
 | REC-08 | Recording indicator UI | ⚠️ PARTIAL | Basic indicator exists; needs polish |
@@ -43,11 +43,13 @@ TOTAL V1.0         █░░░░░░░░░░░░░░░░░░░�
 
 **Deliverables Progress:**
 - [x] Basic recording window UI skeleton
-- [ ] Screen capture backend (scap crate integration)
+- [x] Recording sidebar and button polish
+- [x] Screen capture backend (live desktop capture loop wired)
 - [x] Click logging data structures
 - [ ] Click logging persistence to JSON
 - [ ] Project file I/O
-- [ ] Recording state management (Zustand setup)
+- [x] Recording state management (Rust session state)
+- [x] Recording path opens in file explorer
 
 **Blockers:**
 - Screen capture implementation (scap/DXGI integration) — high complexity
@@ -127,20 +129,22 @@ All phases blocked on M3 completion.
 
 ### What Works ✅
 - React + TypeScript UI scaffold
+- Light recording-focused UI with sidebar
 - Click event data structures (Rust)
 - Test click logging (simulated mouse events)
-- Click log display in React
 - Basic Tauri IPC bridge (invoke/listen)
+- Recording path opens in file explorer
 - Project folder structure concept
 
 ### What's Stubbed 🟡
-- `capture.rs`: Module exists but doesn't actually capture screen
-- Recording start/stop: No real capture backend
+- `capture.rs`: Starts live desktop capture, but still needs region selection and validation
+- Recording start/stop: Session plumbing exists, using ffmpeg desktop capture
 - Project file format: Structure defined, no I/O implemented
 - Export pipeline: No FFmpeg integration
 
 ### What's Missing ❌
-- **Screen capture** — `scap` crate not integrated
+- **Screen capture** — region selection and reliability tuning not integrated yet
+- **Recording UX** — no stop-state distinction beyond current toggle button
 - **Real mouse hooks** — No Win32 `SetWindowsHookEx` implementation
 - **Cursor tracking** — No continuous movement logging (60hz)
 - **Audio capture** — Not started
@@ -153,10 +157,10 @@ All phases blocked on M3 completion.
 ## Next Steps (Priorities)
 
 ### Immediate (This Week)
-1. Integrate `scap` crate for screen capture
-2. Implement basic screen recording loop (capture → buffer → save raw)
-3. Add region selection UI for recording area
-4. Test frame rates and CPU usage
+1. Add region selection UI for recording area
+2. Test frame rates and CPU usage
+3. Persist click log to project files
+4. Validate recording output on longer sessions
 
 ### Short-term (Next 2 Weeks)
 1. Implement Windows mouse hook for real click logging
@@ -217,7 +221,7 @@ All phases blocked on M3 completion.
 | React 19 | UI framework | ✅ Setup | Working |
 | TypeScript 5.8 | Type safety | ✅ Setup | Working |
 | Vite | Bundler | ✅ Setup | Working |
-| `scap` | Screen capture | ❌ TBD | Not yet added to Cargo.toml |
+| Screen capture session plumbing | Project scaffolding | ⚠️ Partial | Live desktop capture added; region selection and validation pending |
 | `ffmpeg-next` | Video encoding | ❌ TBD | Not yet added to Cargo.toml |
 | Win32 API | Mouse hooks | ❌ TBD | Not yet integrated |
 | WASAPI | Audio capture | ❌ TBD | Not yet integrated |
@@ -244,7 +248,7 @@ All phases blocked on M3 completion.
 - [x] REQUIREMENTS.md — Project spec ✅
 - [x] TIMELINE.md — Development phases ✅
 - [x] PROGRESS.md — This file ✅
-- [ ] README.md — Updated with current status
+- [x] README.md — Updated with current status
 - [ ] CONTRIBUTING.md — Developer guide (M4)
 - [ ] USER_MANUAL.md — End-user docs (M4)
 

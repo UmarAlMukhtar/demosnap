@@ -1,19 +1,12 @@
-.logo.vite:hover {
-  filter: drop-shadow(0 0 2em #747bff);
-}
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
 
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafb);
-}
 :root {
-  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
+  font-family: Inter, "Segoe UI", Helvetica, Arial, sans-serif;
   font-size: 16px;
-  line-height: 24px;
+  line-height: 1.5;
   font-weight: 400;
-
-  color: #0f0f0f;
-  background-color: #f6f6f6;
-
+  color: #1f2937;
+  background: #f5f7fb;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -21,96 +14,271 @@
   -webkit-text-size-adjust: 100%;
 }
 
-.container {
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
   margin: 0;
-  padding-top: 10vh;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  text-align: center;
+  overflow: hidden;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: 0.75s;
+body {
+  min-width: 320px;
 }
 
-.logo.tauri:hover {
-  filter: drop-shadow(0 0 2em #24c8db);
-}
-
-.row {
-  display: flex;
-  justify-content: center;
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-
-a:hover {
-  color: #535bf2;
-}
-
-h1 {
-  text-align: center;
-}
-
-input,
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  color: #0f0f0f;
-  background-color: #ffffff;
-  transition: border-color 0.25s;
-  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.2);
+button,
+code {
+  font: inherit;
 }
 
 button {
-  cursor: pointer;
-}
-
-button:hover {
-  border-color: #396cd8;
-}
-button:active {
-  border-color: #396cd8;
-  background-color: #e8e8e8;
-}
-
-input,
-button {
+  border: 0;
   outline: none;
 }
 
-#greet-input {
-  margin-right: 5px;
+.app-shell {
+  width: 100%;
+  height: 100vh;
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.7), transparent 22%),
+    linear-gradient(180deg, #ffffff 0%, #eef3fb 100%);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color: #f6f6f6;
-    background-color: #2f2f2f;
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px 16px;
+  border-right: 1px solid rgba(148, 163, 184, 0.25);
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(16px);
+}
+
+.brand {
+  margin-bottom: 8px;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #111827;
+}
+
+.sidebar-tab {
+  width: 100%;
+  border-radius: 14px;
+  padding: 14px 16px;
+  text-align: left;
+  font-weight: 700;
+  color: #1f2937;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.18);
+}
+
+.sidebar-tab.active {
+  background: linear-gradient(135deg, #ffffff 0%, #edf2f7 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(148, 163, 184, 0.2),
+    0 8px 30px rgba(15, 23, 42, 0.08);
+}
+
+.workspace {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  padding: 24px;
+}
+
+.recording-panel {
+  width: min(100%, 560px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 16px;
+  padding: 32px 24px;
+}
+
+.record-visual {
+  position: relative;
+  width: 260px;
+  height: 260px;
+  display: grid;
+  place-items: center;
+}
+
+.record-ripple {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at center, rgba(234, 47, 47, 0.16) 0 27%, transparent 27.5%),
+    radial-gradient(circle at center, rgba(234, 47, 47, 0.14) 0 43%, transparent 43.5%),
+    radial-gradient(circle at center, rgba(234, 47, 47, 0.1) 0 58%, transparent 58.5%),
+    radial-gradient(circle at center, rgba(234, 47, 47, 0.06) 0 73%, transparent 73.5%);
+  filter: blur(0.5px);
+  opacity: 0.95;
+}
+
+.record-button {
+  position: relative;
+  z-index: 1;
+  width: 180px;
+  height: 180px;
+  padding: 0;
+  border-radius: 999px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  color: #ffffff;
+  background: radial-gradient(circle at 30% 25%, #ff8b8b 0%, #ea2f2f 45%, #c81414 100%);
+  box-shadow:
+    0 16px 42px rgba(220, 38, 38, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+}
+
+.record-button:hover {
+  transform: translateY(-2px) scale(1.01);
+  filter: saturate(1.04);
+}
+
+.record-button:active {
+  transform: translateY(0) scale(0.99);
+}
+
+.record-symbol {
+  position: relative;
+  width: 68px;
+  height: 68px;
+  display: grid;
+  place-items: center;
+}
+
+.record-symbol-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 6px solid rgba(255, 255, 255, 0.98);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18);
+}
+
+.record-symbol-dot {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.15);
+}
+
+.record-button-label {
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #ffffff;
+  text-transform: uppercase;
+}
+
+.record-title {
+  margin: 4px 0 0;
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: #111827;
+}
+
+.record-copy {
+  margin: 0;
+  max-width: 34ch;
+  color: #4b5563;
+}
+
+.record-status {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  color: #6b7280;
+  font-size: 0.95rem;
+}
+
+.record-path {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow-wrap: anywhere;
+  color: #2563eb;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.record-path:hover {
+  color: #1d4ed8;
+}
+
+@media (max-width: 720px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
   }
 
-  a:hover {
-    color: #24c8db;
+  .sidebar {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    border-right: 0;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.25);
   }
 
-  input,
-  button {
-    color: #ffffff;
-    background-color: #0f0f0f98;
+  .sidebar-tab {
+    width: auto;
   }
-  button:active {
-    background-color: #0f0f0f69;
+
+  .workspace {
+    padding: 16px;
+  }
+
+  .recording-panel {
+    gap: 14px;
+    padding: 24px 16px;
+  }
+
+  .record-visual {
+    width: 220px;
+    height: 220px;
+  }
+
+  .record-button {
+    width: 150px;
+    height: 150px;
+  }
+
+  .record-symbol {
+    width: 56px;
+    height: 56px;
+  }
+
+  .record-symbol-ring {
+    border-width: 5px;
+  }
+
+  .record-symbol-dot {
+    width: 17px;
+    height: 17px;
+  }
+
+  .record-button-label {
+    font-size: 0.92rem;
+  }
+
+  .record-title {
+    font-size: 1.5rem;
   }
 }

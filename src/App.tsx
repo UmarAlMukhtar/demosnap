@@ -1,48 +1,96 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import "./App.css";
 
-type ClickEvent = {
-  timestamp_ms: number;
-  x: number;
-  y: number;
-  event_type: "LeftDown" | "LeftUp" | "Move";
-};
-
 function App() {
-  const [clickLog, setClickLog] = useState<ClickEvent[]>([]);
-  const [status, setStatus] = useState("Click anywhere in the panel to log it.");
+  const [status, setStatus] = useState("Ready to record.");
+  const [recordingPath, setRecordingPath] = useState<string | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
 
   useEffect(() => {
-    invoke<ClickEvent[]>("get_click_log")
-      .then(setClickLog)
-      .catch(() => setStatus("Click log backend is not ready yet."));
+    return undefined;
   }, []);
 
-  async function logClick(event: React.MouseEvent<HTMLElement>) {
-    const updatedLog = await invoke<ClickEvent[]>("record_click", {
-      x: Math.round(event.clientX),
-      y: Math.round(event.clientY),
-    });
+  async function startRecording() {
+    try {
+      const projectDir = await invoke<string>("start_recording");
 
-    setClickLog(updatedLog);
-    const latest = updatedLog[updatedLog.length - 1];
-    setStatus(`Logged click at (${latest.x}, ${latest.y}). Total: ${updatedLog.length}`);
+      setIsRecording(true);
+      setRecordingPath(projectDir);
+      setStatus(`Recording session started in ${projectDir}`);
+    } catch (error) {
+      setStatus(String(error));
+    }
+  }
+
+  async function stopRecording() {
+    try {
+      const projectDir = await invoke<string>("stop_recording");
+
+      setIsRecording(false);
+      setRecordingPath(projectDir);
+      setStatus(`Recording session stopped. Project saved to ${projectDir}`);
+    } catch (error) {
+      setStatus(String(error));
+    }
+  }
+
+  async function openRecordingPath() {
+    if (!recordingPath) {
+      return;
+    }
+
+    try {
+      await revealItemInDir(recordingPath);
+    } catch (error) {
+      setStatus(String(error));
+    }
   }
 
   return (
-    <main className="container" onClick={logClick}>
-      <h1>Click Log</h1>
-      <p>{status}</p>
-      <section>
-        <h2>Recent clicks</h2>
-        <ul>
-          {clickLog.slice(-5).reverse().map((event) => (
-            <li key={`${event.timestamp_ms}-${event.x}-${event.y}`}>
-              {event.event_type} at ({event.x}, {event.y})
-            </li>
-          ))}
-        </ul>
+    <main className="app-shell">
+      <aside className="sidebar" aria-label="Navigation">
+        <div className="brand">Demosnap</div>
+        <button className="sidebar-tab active" type="button">
+          Recording
+        </button>
+      </aside>
+
+      <section className="workspace">
+        <div className="recording-panel">
+          <div className="record-visual">
+            <div className="record-ripple" aria-hidden="true" />
+            <button
+              className={`record-button ${isRecording ? "recording" : "idle"}`}
+              onClick={isRecording ? stopRecording : startRecording}
+              aria-label={isRecording ? "Stop recording" : "Start recording"}
+              type="button"
+            >
+              <span className="record-symbol" aria-hidden="true">
+                <span className="record-symbol-ring" />
+                <span className="record-symbol-dot" />
+              </span>
+              <span className="record-button-label">RECORD</span>
+            </button>
+          </div>
+
+          <p className="record-title">{isRecording ? "Recording" : "Ready. Start recording"}</p>
+          <p className="record-copy">
+            {isRecording
+              ? "Click the button again to stop the current session."
+              : "Press the red button to begin capturing your screen."}
+          </p>
+
+          <div className="record-status">
+            <span>{status}</span>
+            {recordingPath ? (
+              <button className="record-path" onClick={openRecordingPath} type="button">
+                {recordingPath}
+              </button>
+            ) : null}
+          </div>
+        </div>
       </section>
     </main>
   );

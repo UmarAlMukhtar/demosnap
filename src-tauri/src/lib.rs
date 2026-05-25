@@ -1,7 +1,9 @@
 mod capture;
 mod input;
 
+use std::sync::Mutex;
 use tauri::State;
+use tauri_plugin_opener::init as opener_init;
 
 #[tauri::command]
 fn test_click_log() -> String {
@@ -32,19 +34,49 @@ fn get_click_log(log: State<'_, input::ClickLog>) -> Vec<input::ClickEvent> {
     log.lock().unwrap().clone()
 }
 
+#[tauri::command]
+fn start_recording(recording: State<'_, capture::RecordingState>) -> Result<String, String> {
+    let mut active_session = recording.lock().unwrap();
+
+    if active_session.is_some() {
+        return Err("A recording is already in progress.".to_string());
+    }
+
+    let session = capture::start()?;
+    let project_dir = session.project_dir.to_string_lossy().to_string();
+    *active_session = Some(session);
+
+    Ok(project_dir)
+}
+
+#[tauri::command]
+fn stop_recording(recording: State<'_, capture::RecordingState>) -> Result<String, String> {
+    let mut active_session = recording.lock().unwrap();
+    let session = active_session
+        .take()
+        .ok_or_else(|| "No active recording session.".to_string())?;
+
+    capture::stop(session)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     println!("APP STARTING - you should see this");
     env_logger::init();
 
     let click_log = input::new_click_log();
-    
+    let recording_state: capture::RecordingState = Mutex::new(None);
+
     tauri::Builder::default()
+        .plugin(opener_init())
         .manage(click_log)
+        .manage(recording_state)
         .invoke_handler(tauri::generate_handler![
             test_click_log,
             record_click,
-            get_click_log
+            get_click_log,
+            start_recording,
+            stop_recording
         ])
         .run(tauri::generate_context!())
         .expect("error while running demosnap");
