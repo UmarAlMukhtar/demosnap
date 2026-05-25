@@ -9,6 +9,8 @@ use std::process::{Child, ChildStdin, Stdio};
 use std::sync::Mutex;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
+use crate::input::ClickEvent;
+
 pub type RecordingState = Mutex<Option<RecordingSession>>;
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
@@ -37,6 +39,7 @@ struct RecordingManifest {
     updated_at_ms: u64,
     status: String,
     video_file: String,
+    clicks_file: String,
     capture_region: Option<RecordingRegion>,
     duration_ms: Option<u128>,
 }
@@ -59,10 +62,13 @@ pub fn start(capture_region: Option<RecordingRegion>) -> Result<RecordingSession
             updated_at_ms: created_at_ms,
             status: "recording".to_string(),
             video_file: "video.mp4".to_string(),
+            clicks_file: "clicks.json".to_string(),
             capture_region,
             duration_ms: None,
         },
     )?;
+
+    write_click_log(&project_dir, &[])?;
 
     log::info!("Capture session started at {:?}", project_dir);
     Ok(RecordingSession {
@@ -97,6 +103,7 @@ pub fn stop(session: RecordingSession) -> Result<String, String> {
                 .unwrap_or_default()
                 .to_string_lossy()
                 .to_string(),
+            clicks_file: "clicks.json".to_string(),
             capture_region: session.capture_region,
             duration_ms: Some(duration.as_millis()),
         },
@@ -198,4 +205,11 @@ fn write_manifest(path: &PathBuf, manifest: &RecordingManifest) -> Result<(), St
     let manifest_json =
         serde_json::to_string_pretty(manifest).map_err(|error| error.to_string())?;
     fs::write(path, manifest_json).map_err(|error| error.to_string())
+}
+
+pub fn write_click_log(project_dir: &PathBuf, events: &[ClickEvent]) -> Result<PathBuf, String> {
+    let click_log_path = project_dir.join("clicks.json");
+    let click_log_json = serde_json::to_string_pretty(events).map_err(|error| error.to_string())?;
+    fs::write(&click_log_path, click_log_json).map_err(|error| error.to_string())?;
+    Ok(click_log_path)
 }

@@ -37,6 +37,7 @@ fn get_click_log(log: State<'_, input::ClickLog>) -> Vec<input::ClickEvent> {
 #[tauri::command]
 fn start_recording(
     recording: State<'_, capture::RecordingState>,
+    click_log: State<'_, input::ClickLog>,
     capture_region: Option<capture::RecordingRegion>,
 ) -> Result<String, String> {
     let mut active_session = recording.lock().unwrap();
@@ -46,6 +47,8 @@ fn start_recording(
     }
 
     let session = capture::start(capture_region)?;
+    click_log.lock().unwrap().clear();
+    input::set_active_click_log(Some(click_log.inner().clone()));
     let project_dir = session.project_dir.to_string_lossy().to_string();
     *active_session = Some(session);
 
@@ -53,12 +56,18 @@ fn start_recording(
 }
 
 #[tauri::command]
-fn stop_recording(recording: State<'_, capture::RecordingState>) -> Result<String, String> {
+fn stop_recording(
+    recording: State<'_, capture::RecordingState>,
+    click_log: State<'_, input::ClickLog>,
+) -> Result<String, String> {
     let mut active_session = recording.lock().unwrap();
     let session = active_session
         .take()
         .ok_or_else(|| "No active recording session.".to_string())?;
 
+    let clicks = click_log.lock().unwrap().clone();
+    capture::write_click_log(&session.project_dir, &clicks)?;
+    input::set_active_click_log(None);
     capture::stop(session)
 }
 
@@ -68,6 +77,7 @@ pub fn run() {
     env_logger::init();
 
     let click_log = input::new_click_log();
+    input::start_mouse_hook_thread();
     let recording_state: capture::RecordingState = Mutex::new(None);
 
     tauri::Builder::default()

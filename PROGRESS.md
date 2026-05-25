@@ -36,10 +36,10 @@ TOTAL V1.0         █░░░░░░░░░░░░░░░░░░░�
 | REC-02 | Record selected region | ⚠️ IN PROGRESS | Drag-to-select region overlay is wired to ffmpeg; needs validation and polish |
 | REC-06 | Pause/resume during recording | ❌ NOT STARTED | State management needed |
 | REC-08 | Recording indicator UI | ✅ DONE | Live recording pill and elapsed timer shown while recording |
-| INP-01 | Log left clicks with coordinates | ✅ DONE | Test click logging working; need real hook |
+| INP-01 | Log left clicks with coordinates | ✅ DONE | Global low-level mouse hook records real clicks during recording |
 | INP-03 | Log cursor movement at 60hz | ❌ NOT STARTED | Requires Win32 `SetWindowsHookEx` |
-| INP-04 | Store click log + video in project | ⚠️ PARTIAL | Click log in memory; persistence not implemented |
-| Project file structure | Create `.dsnap` folder format | ❌ NOT STARTED | Need file I/O + `project.json` writer |
+| INP-04 | Store click log + video in project | ✅ DONE | Click log is written to `clicks.json` in the project folder on stop |
+| Project file structure | Create `.dsnap` folder format | ✅ DONE | Recording sessions now create `project.json`, `video.mp4`, and `clicks.json` |
 
 **Deliverables Progress:**
 - [x] Basic recording window UI skeleton
@@ -49,8 +49,9 @@ TOTAL V1.0         █░░░░░░░░░░░░░░░░░░░�
 - [x] Recording hover feedback and pointer cursor restored
 - [x] Live recording timer and status indicators
 - [x] Click logging data structures
-- [ ] Click logging persistence to JSON
-- [ ] Project file I/O
+- [x] Global mouse hook wiring for click capture
+- [x] Click logging persistence to JSON
+- [x] Project file I/O
 - [x] Recording state management (Rust session state)
 - [x] Recording path opens in file explorer
 
@@ -136,8 +137,10 @@ All phases blocked on M3 completion.
 - Recording button hover feedback and pointer cursor behavior
 - Live elapsed recording timer and active-state pill
 - Click event data structures (Rust)
-- Test click logging (simulated mouse events)
+- Global mouse hook for click logging
 - Basic Tauri IPC bridge (invoke/listen)
+- Click log persistence to `clicks.json`
+- `.dsnap` project folder creation with `project.json`, `video.mp4`, and `clicks.json`
 - Recording path opens in file explorer
 - Project folder structure concept
 
@@ -150,11 +153,9 @@ All phases blocked on M3 completion.
 ### What's Missing ❌
 - **Screen capture** — region selection and reliability tuning not integrated yet
 - **Recording UX** — no stop-state distinction beyond current toggle button
-- **Real mouse hooks** — No Win32 `SetWindowsHookEx` implementation
 - **Cursor tracking** — No continuous movement logging (60hz)
 - **Audio capture** — Not started
 - **Video encoding** — FFmpeg not integrated
-- **Project persistence** — Click log not saved to disk
 - **Error handling** — No graceful failures for missing disk space, etc.
 
 ---
@@ -227,8 +228,9 @@ All phases blocked on M3 completion.
 | TypeScript 5.8 | Type safety | ✅ Setup | Working |
 | Vite | Bundler | ✅ Setup | Working |
 | Screen capture session plumbing | Project scaffolding | ⚠️ Partial | Live desktop capture added; region selection, validation, and timer polish pending |
+| Project file persistence | Storage | ✅ Done | `project.json` and `clicks.json` are written into each `.dsnap` folder |
 | `ffmpeg-next` | Video encoding | ❌ TBD | Not yet added to Cargo.toml |
-| Win32 API | Mouse hooks | ❌ TBD | Not yet integrated |
+| Win32 API | Mouse hooks | ✅ Setup | Global low-level mouse hook captures real clicks during recording |
 | WASAPI | Audio capture | ❌ TBD | Not yet integrated |
 | Zustand | State management | ❌ TBD | Not yet added |
 | `serde` | JSON serialization | ⚠️ Available | Used for ClickEvent struct |
@@ -242,6 +244,7 @@ All phases blocked on M3 completion.
 - [ ] System test: record screen → export → verify video
 - [ ] Performance test: 60fps frame capture
 - [ ] UI test: region overlay selection aligns to capture output
+- [ ] Project reload test: verify `clicks.json` and `project.json` are written correctly
 - [ ] Audio sync test: video + microphone audio
 - [ ] Export performance test: 5-min 1080p < 3 min
 - [ ] Offline mode test: no network calls
