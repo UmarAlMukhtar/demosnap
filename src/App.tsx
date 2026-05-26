@@ -40,6 +40,15 @@ function App() {
   const [countdown, setCountdown] = useState<number | null>(null);
   const [targetRegion, setTargetRegion] = useState<RecordingRegion | null>(null);
 
+  // Export states
+  const [exportResolution, setExportResolution] = useState<string>("Original");
+  const [exportFramerate, setExportFramerate] = useState<string>("60 fps");
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState<number | null>(null);
+  const [exportStatus, setExportStatus] = useState<string>("");
+  const [exportedPath, setExportedPath] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"recording" | "export">("recording");
+
   const currentWindow = getCurrentWindow();
 
   useEffect(() => {
@@ -74,6 +83,7 @@ function App() {
       if (event.payload) {
         setRecordingPath(event.payload);
         setStatus("Recording session stopped. Project saved.");
+        setActiveTab("export");
       } else {
         setStatus("Recording cancelled or failed.");
       }
@@ -140,6 +150,11 @@ function App() {
   }, [countdown, windowLabel, targetRegion]);
 
   async function startRecording(captureRegion: RecordingRegion | null = null) {
+    setRecordingPath(null);
+    setExportedPath(null);
+    setExportProgress(null);
+    setExportStatus("");
+    setActiveTab("recording");
     try {
       const ctrlWindow = await WebviewWindow.getByLabel("recording-control");
       if (ctrlWindow) {
@@ -307,6 +322,74 @@ function App() {
     }
   }
 
+  async function openExportedFile() {
+    if (!exportedPath) {
+      return;
+    }
+    try {
+      await revealItemInDir(exportedPath);
+    } catch (error) {
+      setExportStatus(`Failed to open folder: ${error}`);
+    }
+  }
+
+  async function handleExportButtonClick() {
+    if (!recordingPath) return;
+
+    try {
+      const date = new Date();
+      const timestamp = date.getFullYear().toString() +
+        (date.getMonth() + 1).toString().padStart(2, "0") +
+        date.getDate().toString().padStart(2, "0") + "_" +
+        date.getHours().toString().padStart(2, "0") +
+        date.getMinutes().toString().padStart(2, "0");
+      const defaultName = `Demosnap_${timestamp}.mp4`;
+
+      const selectedPath = await invoke<string | null>("select_export_path", { defaultName });
+      if (!selectedPath) {
+        return;
+      }
+
+      setIsExporting(true);
+      setExportProgress(0);
+      setExportStatus("Initializing export...");
+      setExportedPath(null);
+
+      await invoke("export_recording", {
+        projectDir: recordingPath,
+        outputPath: selectedPath,
+        resolution: exportResolution,
+        framerate: exportFramerate,
+      });
+
+      setExportedPath(selectedPath);
+      setExportStatus("Export completed successfully!");
+      setIsExporting(false);
+      setExportProgress(100);
+    } catch (err) {
+      console.error("Export error:", err);
+      setExportStatus(`Export failed: ${err}`);
+      setIsExporting(false);
+      setExportProgress(null);
+    }
+  }
+
+  // Listen for export progress updates
+  useEffect(() => {
+    if (windowLabel !== "main") {
+      return undefined;
+    }
+
+    const unlistenProgress = listen<number>("export-progress", (event) => {
+      setExportProgress(event.payload);
+      setExportStatus(`Exporting video (${event.payload}%)...`);
+    });
+
+    return () => {
+      unlistenProgress.then(f => f());
+    };
+  }, [windowLabel]);
+
   function formatElapsedTime(milliseconds: number) {
     const totalSeconds = Math.floor(milliseconds / 1000);
     const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, "0");
@@ -407,76 +490,171 @@ function App() {
       <main className="app-shell">
         <aside className="sidebar" aria-label="Navigation">
           <div className="brand">Demosnap</div>
-          <button className="sidebar-tab active" type="button">
+          <button
+            className={`sidebar-tab ${activeTab === "recording" ? "active" : ""}`}
+            type="button"
+            onClick={() => setActiveTab("recording")}
+          >
             Recording
           </button>
+          {recordingPath && (
+            <button
+              className={`sidebar-tab ${activeTab === "export" ? "active" : ""}`}
+              type="button"
+              onClick={() => setActiveTab("export")}
+            >
+              Export
+            </button>
+          )}
         </aside>
 
         <section className="workspace">
-          <div className="recording-panel">
-            <div className="record-visual">
-              <div className="record-ripple" aria-hidden="true" />
-              <button
-                className={`record-button ${isRecording ? "recording" : "idle"}`}
-                onClick={handleRecordButtonClick}
-                aria-label={isRecording ? "Stop recording" : "Start recording"}
-                disabled={isRecording}
-                type="button"
-              >
-                <span className="record-symbol" aria-hidden="true">
-                  <span className="record-symbol-ring" />
-                  <span className="record-symbol-dot" />
-                </span>
-                <span className="record-button-label">RECORD</span>
-              </button>
-            </div>
-
-            <p className="record-title">{isRecording ? "Recording" : "Ready. Start recording"}</p>
-            <p className="record-copy">
-              {isRecording
-                ? "Recording is managed by the overlay control panel."
-                : captureMode === "region"
-                  ? "Press the red button, then drag to choose a capture region."
-                  : "Press the red button to begin capturing your screen."}
-            </p>
-
-            <div className="recording-metrics" aria-label="Recording metrics">
-              <span className={`recording-pill ${isRecording ? "live" : "idle"}`}>
-                {isRecording ? "Recording" : "Idle"}
-              </span>
-              <span className="recording-pill recording-time">{formatElapsedTime(recordingElapsedMs)}</span>
-            </div>
-
-            <div className="capture-settings" aria-label="Capture settings">
-              <div className="capture-mode">
+          {activeTab === "recording" ? (
+            <div className="recording-panel">
+              <div className="record-visual">
+                <div className="record-ripple" aria-hidden="true" />
                 <button
-                  className={`capture-toggle ${captureMode === "full" ? "active" : ""}`}
-                  type="button"
-                  onClick={() => setCaptureMode("full")}
+                  className={`record-button ${isRecording ? "recording" : "idle"}`}
+                  onClick={handleRecordButtonClick}
+                  aria-label={isRecording ? "Stop recording" : "Start recording"}
                   disabled={isRecording}
-                >
-                  Full screen
-                </button>
-                <button
-                  className={`capture-toggle ${captureMode === "region" ? "active" : ""}`}
                   type="button"
-                  onClick={() => setCaptureMode("region")}
-                  disabled={isRecording}
                 >
-                  Region
+                  <span className="record-symbol" aria-hidden="true">
+                    <span className="record-symbol-ring" />
+                    <span className="record-symbol-dot" />
+                  </span>
+                  <span className="record-button-label">RECORD</span>
                 </button>
               </div>
-            </div>
 
-            <div className="record-status">
-              <span>{status}</span>
-              {recordingPath ? (
-                <button className="record-path" onClick={openRecordingPath} type="button">
-                  {recordingPath}
-                </button>
-              ) : null}
+              <p className="record-title">{isRecording ? "Recording" : "Ready. Start recording"}</p>
+              <p className="record-copy">
+                {isRecording
+                  ? "Recording is managed by the overlay control panel."
+                  : captureMode === "region"
+                    ? "Press the red button, then drag to choose a capture region."
+                    : "Press the red button to begin capturing your screen."}
+              </p>
+
+              <div className="recording-metrics" aria-label="Recording metrics">
+                <span className={`recording-pill ${isRecording ? "live" : "idle"}`}>
+                  {isRecording ? "Recording" : "Idle"}
+                </span>
+                <span className="recording-pill recording-time">{formatElapsedTime(recordingElapsedMs)}</span>
+              </div>
+
+              <div className="capture-settings" aria-label="Capture settings">
+                <div className="capture-mode">
+                  <button
+                    className={`capture-toggle ${captureMode === "full" ? "active" : ""}`}
+                    type="button"
+                    onClick={() => setCaptureMode("full")}
+                    disabled={isRecording}
+                  >
+                    Full screen
+                  </button>
+                  <button
+                    className={`capture-toggle ${captureMode === "region" ? "active" : ""}`}
+                    type="button"
+                    onClick={() => setCaptureMode("region")}
+                    disabled={isRecording}
+                  >
+                    Region
+                  </button>
+                </div>
+              </div>
+
+              <div className="record-status">
+                <span>{status}</span>
+                {recordingPath ? (
+                  <button className="record-path" onClick={openRecordingPath} type="button">
+                    {recordingPath}
+                  </button>
+                ) : null}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="export-panel">
+              <h3 className="export-panel-title">Export Settings</h3>
+              
+              <div className="export-settings-row">
+                <div className="export-setting-group">
+                  <label className="export-setting-label">Resolution</label>
+                  <div className="export-selector">
+                    <button
+                      className={`export-selector-btn ${exportResolution === "Original" ? "active" : ""}`}
+                      onClick={() => setExportResolution("Original")}
+                      disabled={isExporting}
+                      type="button"
+                    >
+                      Original
+                    </button>
+                    <button
+                      className={`export-selector-btn ${exportResolution === "1080p (Full HD)" ? "active" : ""}`}
+                      onClick={() => setExportResolution("1080p (Full HD)")}
+                      disabled={isExporting}
+                      type="button"
+                    >
+                      1080p
+                    </button>
+                  </div>
+                </div>
+
+                <div className="export-setting-group">
+                  <label className="export-setting-label">Frame Rate</label>
+                  <div className="export-selector">
+                    <button
+                      className={`export-selector-btn ${exportFramerate === "60 fps" ? "active" : ""}`}
+                      onClick={() => setExportFramerate("60 fps")}
+                      disabled={isExporting}
+                      type="button"
+                    >
+                      60 fps
+                    </button>
+                    <button
+                      className={`export-selector-btn ${exportFramerate === "30 fps" ? "active" : ""}`}
+                      onClick={() => setExportFramerate("30 fps")}
+                      disabled={isExporting}
+                      type="button"
+                    >
+                      30 fps
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {isExporting || exportProgress !== null ? (
+                <div className="export-progress-container">
+                  <span className="export-status-text">{exportStatus}</span>
+                  <div className="export-progress-bar-bg">
+                    <div
+                      className="export-progress-bar-fill"
+                      style={{ width: `${exportProgress || 0}%` }}
+                    />
+                  </div>
+                </div>
+              ) : null}
+
+              {exportedPath ? (
+                <div className="export-success-message">
+                  <p>Video exported successfully!</p>
+                  <button className="export-success-btn" onClick={openExportedFile} type="button">
+                    Open Folder / File
+                  </button>
+                </div>
+              ) : (
+                <button
+                  className="export-action-btn"
+                  onClick={handleExportButtonClick}
+                  disabled={isExporting}
+                  type="button"
+                >
+                  Export Video...
+                </button>
+              )}
+            </div>
+          )}
         </section>
 
         {isSelectingRegion ? (

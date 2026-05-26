@@ -360,7 +360,7 @@ fn find_in_dir(dir: &std::path::Path, exe_name: &str, depth: usize) -> Option<Pa
 /// Finds an executable by name in PATH and resolves any symlinks/reparse points.
 /// This is required because WinGet (and Scoop) install executables as symlinks,
 /// and CreateProcess in MSI security context cannot follow those symlinks.
-fn resolve_exe_path(name: &str) -> PathBuf {
+pub(crate) fn resolve_exe_path(name: &str) -> PathBuf {
     #[cfg(target_os = "windows")]
     {
         let exe = format!("{name}.exe");
