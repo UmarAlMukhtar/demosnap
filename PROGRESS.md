@@ -4,19 +4,19 @@ This document tracks implementation progress against TIMELINE.md and REQUIREMENT
 
 **Current Updated:** 2026-05-26  
 **Current Milestone:** M1 — MVP Recording & Export  
-**Current Phase:** Phase 1.2 — Audio Capture
+**Current Phase:** Phase 1.3 — Basic Export
 
 ---
 
 ## Overall Progress
 
 ```
-M1 (Months 1–3)    ████░░░░░░░░░░░░░░░░░░░░░░░ ~25%
+M1 (Months 1–3)    █████████████░░░░░░░░░░░░░░ ~50%
 M2 (Months 4–6)    ░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 0%
 M3 (Months 7–9)    ░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 0%
 M4 (Months 10–12)  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 0%
-
-TOTAL V1.0         █░░░░░░░░░░░░░░░░░░░░░░░░░░░ ~6%
+ 
+TOTAL V1.0         ███░░░░░░░░░░░░░░░░░░░░░░░░░ ~12%
 ```
 
 ---
@@ -24,7 +24,7 @@ TOTAL V1.0         █░░░░░░░░░░░░░░░░░░░�
 ## Milestone 1: MVP Recording & Export (M1)
 
 **Target:** Month 3 | **Current Estimate:** On track  
-**Overall Progress:** 25%
+**Overall Progress:** 50%
 
 ### Phase 1.1: Core Recording
 
@@ -71,17 +71,16 @@ TOTAL V1.0         █░░░░░░░░░░░░░░░░░░░�
 ---
 
 ### Phase 1.2: Audio Capture
-
-**Target:** Weeks 5–8 | **Status:** ❌ NOT STARTED
-
-| Requirement | Task | Status |
-|---|---|---|
-| REC-03 | Record microphone audio | ❌ NOT STARTED |
-| REC-04 | Record system audio (deferred) | ❌ DEFERRED |
-
+ 
+**Target:** Weeks 5–8 | **Status:** ✅ DONE
+ 
+| Requirement | Task | Status | Notes |
+|---|---|---|---|
+| REC-03 | Record microphone audio | ✅ DONE | Auto-detect default microphone via COM/WASAPI, capture raw WAV files via FFmpeg DirectShow, and concat parts during pause/resume |
+| REC-04 | Record system audio | ✅ DONE | Auto-detect default playback device via COM/WASAPI, capture raw WAV via FFmpeg loopback, and concat parts |
+ 
 **Blockers:**
-- Phase 1.1 recording must work first
-- WASAPI / Core Audio integration TBD
+- None ✅
 
 ---
 
@@ -148,12 +147,15 @@ All phases blocked on M3 completion.
 - Region selection overlay with custom mouse dragging
 - Pause/resume state management with segment concatenation
 - Robust executable path resolution for ffmpeg bypassing RedirectionGuard symlink security mitigations in MSI packages (fixes ERROR_UNTRUSTED_MOUNT_POINT / os error 448)
+- Microphone audio capture via FFmpeg DirectShow with automatic default recording endpoint discovery using COM WASAPI
+- System audio capture via FFmpeg WASAPI loopback with automatic default playback endpoint discovery
+- Audio pause/resume/stop segments synchronization and concatenation
+- Active microphone name and status indicator display in React UI
 
 ### What's Stubbed 🟡
 - Export pipeline: Video + audio muxing (Phase 1.3)
 
 ### What's Missing ❌
-- **Audio capture** — Not started (Phase 1.2)
 - **Error handling** — No graceful failures for missing disk space, etc.
 
 ---
@@ -270,4 +272,4 @@ All phases blocked on M3 completion.
 4. **Issues found:** Add to Known Issues & Risks
 5. **Dependency changes:** Update Tech Stack Status
 
-**Last updated:** Commit `9b5a301` (click logging feature)
+**Last updated:** Feature `audio-capture` (Phase 1.2 completed)

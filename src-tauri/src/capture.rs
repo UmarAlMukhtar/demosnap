@@ -29,12 +29,20 @@ pub struct RecordingRegion {
 pub struct RecordingSession {
     pub project_dir: PathBuf,
     pub video_path: PathBuf,
+    pub audio_path: PathBuf,
     pub manifest_path: PathBuf,
     pub capture_region: Option<RecordingRegion>,
     pub created_at_ms: u64,
-    pub parts: Vec<PathBuf>,
+    pub video_parts: Vec<PathBuf>,
+    pub audio_parts: Vec<PathBuf>,
+    pub system_audio_path: PathBuf,
+    pub system_audio_parts: Vec<PathBuf>,
     pub active_segments: Vec<(u64, Option<u64>)>, // (start_ms, Option<end_ms>)
-    pub ffmpeg_child: Option<Child>,              // None if paused
+    pub ffmpeg_child: Option<Child>,              // None if paused (video process)
+    pub ffmpeg_audio_child: Option<Child>,        // None if paused/not recording (audio process)
+    pub ffmpeg_sys_audio_child: Option<Child>,
+    pub audio_recording_enabled: bool,
+    pub sys_audio_recording_enabled: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -44,6 +52,8 @@ struct RecordingManifest {
     updated_at_ms: u64,
     status: String,
     video_file: String,
+    audio_file: Option<String>,
+    system_audio_file: Option<String>,
     clicks_file: String,
     capture_region: Option<RecordingRegion>,
     duration_ms: Option<u128>,
@@ -59,12 +69,80 @@ pub fn start(
     capture_log(&format!("project_dir ready: {:?}", project_dir));
 
     let video_path = project_dir.join("video.mp4");
+    let audio_path = project_dir.join("audio.wav");
+    let system_audio_path = project_dir.join("system_audio.wav");
     let first_part = project_dir.join("part_0.mp4");
+    let first_audio_part = project_dir.join("audio_part_0.wav");
+    let first_system_audio_part = project_dir.join("system_audio_part_0.wav");
     
-    capture_log(&format!("spawning ffmpeg -> {:?}", first_part));
+    capture_log(&format!("spawning ffmpeg video -> {:?}", first_part));
     let ffmpeg_child = spawn_screen_capture(&first_part, capture_region)
         .map_err(|e| { capture_log(&format!("spawn_screen_capture FAILED: {e}")); e })?;
     capture_log("spawn_screen_capture OK");
+
+    // Audio capture setup
+    let mut ffmpeg_audio_child = None;
+    let mut audio_recording_enabled = false;
+    let mut audio_parts = Vec::new();
+
+    match crate::audio::get_default_microphone_name() {
+        Ok(Some(mic_name)) => {
+            log::info!("Recording audio using microphone: {}", mic_name);
+            capture_log(&format!("spawning ffmpeg audio -> {:?}", first_audio_part));
+            match spawn_audio_capture(&first_audio_part, &mic_name) {
+                Ok(child) => {
+                    ffmpeg_audio_child = Some(child);
+                    audio_recording_enabled = true;
+                    audio_parts.push(first_audio_part);
+                    capture_log("spawn_audio_capture OK");
+                }
+                Err(e) => {
+                    log::warn!("Failed to spawn audio capture: {}", e);
+                    capture_log(&format!("spawn_audio_capture FAILED: {e}"));
+                }
+            }
+        }
+        Ok(None) => {
+            log::info!("No microphone detected. Proceeding with video-only recording.");
+            capture_log("No microphone detected");
+        }
+        Err(e) => {
+            log::warn!("Error querying default microphone: {}", e);
+            capture_log(&format!("Error querying default microphone: {e}"));
+        }
+    }
+
+    // System Audio capture setup
+    let mut ffmpeg_sys_audio_child = None;
+    let mut sys_audio_recording_enabled = false;
+    let mut system_audio_parts = Vec::new();
+
+    match crate::audio::get_default_render_name() {
+        Ok(Some(render_name)) => {
+            log::info!("Recording system audio using device: {}", render_name);
+            capture_log(&format!("spawning ffmpeg sys audio -> {:?}", first_system_audio_part));
+            match spawn_system_audio_capture(&first_system_audio_part, &render_name) {
+                Ok(child) => {
+                    ffmpeg_sys_audio_child = Some(child);
+                    sys_audio_recording_enabled = true;
+                    system_audio_parts.push(first_system_audio_part);
+                    capture_log("spawn_system_audio_capture OK");
+                }
+                Err(e) => {
+                    log::warn!("Failed to spawn system audio capture: {}", e);
+                    capture_log(&format!("spawn_system_audio_capture FAILED: {e}"));
+                }
+            }
+        }
+        Ok(None) => {
+            log::info!("No system audio device detected.");
+            capture_log("No system audio device detected");
+        }
+        Err(e) => {
+            log::warn!("Error querying default system audio: {}", e);
+            capture_log(&format!("Error querying default system audio: {e}"));
+        }
+    }
 
     let manifest_path = project_dir.join("project.json");
     let created_at_ms = now_ms();
@@ -76,6 +154,8 @@ pub fn start(
             updated_at_ms: created_at_ms,
             status: "recording".to_string(),
             video_file: "video.mp4".to_string(),
+            audio_file: if audio_recording_enabled { Some("audio.wav".to_string()) } else { None },
+            system_audio_file: if sys_audio_recording_enabled { Some("system_audio.wav".to_string()) } else { None },
             clicks_file: "clicks.json".to_string(),
             capture_region,
             duration_ms: None,
@@ -91,12 +171,20 @@ pub fn start(
     Ok(RecordingSession {
         project_dir,
         video_path,
+        audio_path,
+        system_audio_path,
         manifest_path,
         capture_region,
         created_at_ms,
-        parts: vec![first_part],
+        video_parts: vec![first_part],
+        audio_parts,
+        system_audio_parts,
         active_segments: vec![(created_at_ms, None)],
         ffmpeg_child: Some(ffmpeg_child),
+        ffmpeg_audio_child,
+        ffmpeg_sys_audio_child,
+        audio_recording_enabled,
+        sys_audio_recording_enabled,
     })
 }
 
@@ -104,8 +192,19 @@ pub fn start(
 pub fn pause(session: &mut RecordingSession) -> Result<(), String> {
     capture_log("pause() called");
     let child = session.ffmpeg_child.take().ok_or_else(|| "Already paused.".to_string())?;
-
     stop_screen_capture(child)?;
+
+    if let Some(audio_child) = session.ffmpeg_audio_child.take() {
+        if let Err(e) = stop_screen_capture(audio_child) {
+            log::warn!("Failed to stop audio capture on pause: {}", e);
+        }
+    }
+
+    if let Some(sys_audio_child) = session.ffmpeg_sys_audio_child.take() {
+        if let Err(e) = stop_screen_capture(sys_audio_child) {
+            log::warn!("Failed to stop system audio capture on pause: {}", e);
+        }
+    }
 
     let now = now_ms();
     if let Some(last_segment) = session.active_segments.last_mut() {
@@ -124,7 +223,7 @@ pub fn resume(session: &mut RecordingSession) -> Result<(), String> {
     }
 
     let now = now_ms();
-    let part_filename = format!("part_{}.mp4", session.parts.len());
+    let part_filename = format!("part_{}.mp4", session.video_parts.len());
     let part_path = session.project_dir.join(part_filename);
 
     capture_log(&format!("spawning ffmpeg for resume -> {:?}", part_path));
@@ -132,7 +231,56 @@ pub fn resume(session: &mut RecordingSession) -> Result<(), String> {
         .map_err(|e| { capture_log(&format!("spawn_screen_capture resume FAILED: {e}")); e })?;
     capture_log("spawn_screen_capture resume OK");
 
-    session.parts.push(part_path);
+    session.video_parts.push(part_path);
+
+    if session.audio_recording_enabled {
+        match crate::audio::get_default_microphone_name() {
+            Ok(Some(mic_name)) => {
+                let audio_part_filename = format!("audio_part_{}.wav", session.audio_parts.len());
+                let audio_part_path = session.project_dir.join(audio_part_filename);
+                capture_log(&format!("spawning ffmpeg audio for resume -> {:?}", audio_part_path));
+                match spawn_audio_capture(&audio_part_path, &mic_name) {
+                    Ok(audio_child) => {
+                        session.ffmpeg_audio_child = Some(audio_child);
+                        session.audio_parts.push(audio_part_path);
+                        capture_log("spawn_audio_capture resume OK");
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to spawn audio capture on resume: {}", e);
+                        capture_log(&format!("spawn_audio_capture resume FAILED: {e}"));
+                    }
+                }
+            }
+            _ => {
+                log::warn!("Audio was enabled, but microphone could not be found or opened on resume.");
+            }
+        }
+    }
+
+    if session.sys_audio_recording_enabled {
+        match crate::audio::get_default_render_name() {
+            Ok(Some(render_name)) => {
+                let sys_audio_part_filename = format!("system_audio_part_{}.wav", session.system_audio_parts.len());
+                let sys_audio_part_path = session.project_dir.join(sys_audio_part_filename);
+                capture_log(&format!("spawning ffmpeg sys audio for resume -> {:?}", sys_audio_part_path));
+                match spawn_system_audio_capture(&sys_audio_part_path, &render_name) {
+                    Ok(sys_audio_child) => {
+                        session.ffmpeg_sys_audio_child = Some(sys_audio_child);
+                        session.system_audio_parts.push(sys_audio_part_path);
+                        capture_log("spawn_system_audio_capture resume OK");
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to spawn system audio capture on resume: {}", e);
+                        capture_log(&format!("spawn_system_audio_capture resume FAILED: {e}"));
+                    }
+                }
+            }
+            _ => {
+                log::warn!("System audio was enabled, but device could not be found or opened on resume.");
+            }
+        }
+    }
+
     session.active_segments.push((now, None));
     session.ffmpeg_child = Some(ffmpeg_child);
 
@@ -144,11 +292,23 @@ pub fn stop(mut session: RecordingSession, raw_clicks: &[ClickEvent]) -> Result<
     capture_log("stop() called");
     let now = now_ms();
 
-    // 1. Stop the active ffmpeg process if it is still running
+    // 1. Stop the active ffmpeg processes if they are still running
     if let Some(child) = session.ffmpeg_child.take() {
         stop_screen_capture(child)?;
         if let Some(last_segment) = session.active_segments.last_mut() {
             last_segment.1 = Some(now);
+        }
+    }
+
+    if let Some(audio_child) = session.ffmpeg_audio_child.take() {
+        if let Err(e) = stop_screen_capture(audio_child) {
+            log::warn!("Failed to stop audio capture on stop: {}", e);
+        }
+    }
+
+    if let Some(sys_audio_child) = session.ffmpeg_sys_audio_child.take() {
+        if let Err(e) = stop_screen_capture(sys_audio_child) {
+            log::warn!("Failed to stop system audio capture on stop: {}", e);
         }
     }
 
@@ -175,16 +335,38 @@ pub fn stop(mut session: RecordingSession, raw_clicks: &[ClickEvent]) -> Result<
         .map_err(|e| { capture_log(&format!("write_click_log FAILED: {e}")); e })?;
 
     // 3. Concat all video parts
-    if session.parts.is_empty() {
+    if session.video_parts.is_empty() {
         return Err("No video files recorded.".to_string());
     }
 
-    if session.parts.len() == 1 {
-        let part_path = &session.parts[0];
+    if session.video_parts.len() == 1 {
+        let part_path = &session.video_parts[0];
         std::fs::rename(part_path, &session.video_path)
             .map_err(|e| format!("Failed to rename part to video.mp4: {e}"))?;
     } else {
-        concat_videos(&session.project_dir, &session.parts, &session.video_path)?;
+        concat_files(&session.project_dir, &session.video_parts, &session.video_path, "concat_video.txt")?;
+    }
+
+    // 3b. Concat all audio parts (if any were recorded)
+    if !session.audio_parts.is_empty() {
+        if session.audio_parts.len() == 1 {
+            let part_path = &session.audio_parts[0];
+            std::fs::rename(part_path, &session.audio_path)
+                .map_err(|e| format!("Failed to rename audio part to audio.wav: {e}"))?;
+        } else {
+            concat_files(&session.project_dir, &session.audio_parts, &session.audio_path, "concat_audio.txt")?;
+        }
+    }
+
+    // 3c. Concat all system audio parts (if any were recorded)
+    if !session.system_audio_parts.is_empty() {
+        if session.system_audio_parts.len() == 1 {
+            let part_path = &session.system_audio_parts[0];
+            std::fs::rename(part_path, &session.system_audio_path)
+                .map_err(|e| format!("Failed to rename system audio part to system_audio.wav: {e}"))?;
+        } else {
+            concat_files(&session.project_dir, &session.system_audio_parts, &session.system_audio_path, "concat_sys_audio.txt")?;
+        }
     }
 
     // Calculate total video duration in ms
@@ -210,6 +392,30 @@ pub fn stop(mut session: RecordingSession, raw_clicks: &[ClickEvent]) -> Result<
                 .unwrap_or_default()
                 .to_string_lossy()
                 .to_string(),
+            audio_file: if !session.audio_parts.is_empty() {
+                Some(
+                    session
+                        .audio_path
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string(),
+                )
+            } else {
+                None
+            },
+            system_audio_file: if !session.system_audio_parts.is_empty() {
+                Some(
+                    session
+                        .system_audio_path
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string(),
+                )
+            } else {
+                None
+            },
             clicks_file: "clicks.json".to_string(),
             capture_region: session.capture_region,
             duration_ms: Some(total_duration_ms as u128),
@@ -217,7 +423,17 @@ pub fn stop(mut session: RecordingSession, raw_clicks: &[ClickEvent]) -> Result<
     )?;
 
     // 5. Clean up temporary part files
-    for part in &session.parts {
+    for part in &session.video_parts {
+        if part.exists() {
+            let _ = std::fs::remove_file(part);
+        }
+    }
+    for part in &session.audio_parts {
+        if part.exists() {
+            let _ = std::fs::remove_file(part);
+        }
+    }
+    for part in &session.system_audio_parts {
         if part.exists() {
             let _ = std::fs::remove_file(part);
         }
@@ -226,15 +442,15 @@ pub fn stop(mut session: RecordingSession, raw_clicks: &[ClickEvent]) -> Result<
     Ok(session.project_dir.to_string_lossy().to_string())
 }
 
-fn concat_videos(project_dir: &PathBuf, parts: &[PathBuf], output_path: &PathBuf) -> Result<(), String> {
-    let concat_txt_path = project_dir.join("concat.txt");
+fn concat_files(project_dir: &PathBuf, parts: &[PathBuf], output_path: &PathBuf, txt_filename: &str) -> Result<(), String> {
+    let concat_txt_path = project_dir.join(txt_filename);
     let mut f = std::fs::File::create(&concat_txt_path)
-        .map_err(|e| format!("Failed to create concat.txt: {e}"))?;
+        .map_err(|e| format!("Failed to create {txt_filename}: {e}"))?;
     
     for part in parts {
         let file_name = part.file_name().ok_or_else(|| "Invalid part filename".to_string())?;
         writeln!(f, "file '{}'", file_name.to_string_lossy())
-            .map_err(|e| format!("Failed to write to concat.txt: {e}"))?;
+            .map_err(|e| format!("Failed to write to {txt_filename}: {e}"))?;
     }
     drop(f);
 
@@ -247,7 +463,7 @@ fn concat_videos(project_dir: &PathBuf, parts: &[PathBuf], output_path: &PathBuf
         .arg("-safe")
         .arg("0")
         .arg("-i")
-        .arg("concat.txt")
+        .arg(txt_filename)
         .arg("-c")
         .arg("copy")
         .arg(output_path)
@@ -317,6 +533,37 @@ fn spawn_screen_capture(
         .arg("veryfast")
         .arg("-pix_fmt")
         .arg("yuv420p")
+        .arg(output_path)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+
+    #[cfg(target_os = "windows")]
+    {
+        command.creation_flags(0x0800_0000);
+    }
+
+    command.spawn().map_err(|error| error.to_string())
+}
+
+fn spawn_audio_capture(
+    output_path: &PathBuf,
+    mic_name: &str,
+) -> Result<Child, String> {
+    let ffmpeg_exe = resolve_exe_path("ffmpeg");
+    capture_log(&format!("ffmpeg exe resolved for audio: {:?}", ffmpeg_exe));
+
+    let mut command = Command::new(&ffmpeg_exe);
+    command
+        .arg("-y")
+        .arg("-f")
+        .arg("dshow")
+        .arg("-i")
+        .arg(format!("audio={}", mic_name))
+        .arg("-acodec")
+        .arg("pcm_s16le")
+        .arg("-ar")
+        .arg("44100")
         .arg(output_path)
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
@@ -533,3 +780,30 @@ pub fn write_click_log(project_dir: &PathBuf, events: &[ClickEvent]) -> Result<P
     fs::write(&click_log_path, click_log_json).map_err(|error| error.to_string())?;
     Ok(click_log_path)
 }
+
+fn spawn_system_audio_capture(output_path: &PathBuf, device_name: &str) -> Result<Child, String> {
+    let ffmpeg_exe = resolve_exe_path("ffmpeg");
+    let mut command = Command::new(&ffmpeg_exe);
+
+    // ffmpeg -f wasapi -loop 1 -i "Device Name" -c:a pcm_s16le output.wav
+    command
+        .args([
+            "-y",
+            "-f", "wasapi",
+            "-loop", "1",
+            "-i", device_name,
+            "-c:a", "pcm_s16le",
+        ])
+        .arg(output_path)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+
+    #[cfg(target_os = "windows")]
+    {
+        command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
+
+    command.spawn().map_err(|e| format!("Failed to spawn system audio capture: {e}"))
+}
+
