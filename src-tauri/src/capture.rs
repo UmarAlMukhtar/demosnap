@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::process::{Child, ChildStdin, Stdio};
 use std::sync::Mutex;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Manager;
 
 #[cfg(target_os = "windows")]
@@ -31,9 +31,10 @@ pub struct RecordingSession {
     pub video_path: PathBuf,
     pub manifest_path: PathBuf,
     pub capture_region: Option<RecordingRegion>,
-    pub start_time: Instant,
     pub created_at_ms: u64,
-    ffmpeg_child: Child,
+    pub parts: Vec<PathBuf>,
+    pub active_segments: Vec<(u64, Option<u64>)>, // (start_ms, Option<end_ms>)
+    pub ffmpeg_child: Option<Child>,              // None if paused
 }
 
 #[derive(Debug, Serialize)]
@@ -58,8 +59,10 @@ pub fn start(
     capture_log(&format!("project_dir ready: {:?}", project_dir));
 
     let video_path = project_dir.join("video.mp4");
-    capture_log(&format!("spawning ffmpeg -> {:?}", video_path));
-    let ffmpeg_child = spawn_screen_capture(&video_path, capture_region)
+    let first_part = project_dir.join("part_0.mp4");
+    
+    capture_log(&format!("spawning ffmpeg -> {:?}", first_part));
+    let ffmpeg_child = spawn_screen_capture(&first_part, capture_region)
         .map_err(|e| { capture_log(&format!("spawn_screen_capture FAILED: {e}")); e })?;
     capture_log("spawn_screen_capture OK");
 
@@ -90,20 +93,110 @@ pub fn start(
         video_path,
         manifest_path,
         capture_region,
-        start_time: Instant::now(),
         created_at_ms,
-        ffmpeg_child,
+        parts: vec![first_part],
+        active_segments: vec![(created_at_ms, None)],
+        ffmpeg_child: Some(ffmpeg_child),
     })
 }
 
-// Stop the recording session and finalize the project metadata.
-pub fn stop(session: RecordingSession) -> Result<String, String> {
-    let duration = session.start_time.elapsed();
-    log::info!("Capture Stopped, duration: {:.1}s", duration.as_secs_f32());
+// Pause the recording session by stopping the active ffmpeg capture.
+pub fn pause(session: &mut RecordingSession) -> Result<(), String> {
+    capture_log("pause() called");
+    let child = session.ffmpeg_child.take().ok_or_else(|| "Already paused.".to_string())?;
 
-    stop_screen_capture(session.ffmpeg_child)?;
+    stop_screen_capture(child)?;
 
     let now = now_ms();
+    if let Some(last_segment) = session.active_segments.last_mut() {
+        last_segment.1 = Some(now);
+    }
+
+    capture_log(&format!("paused: segment end set to {}", now));
+    Ok(())
+}
+
+// Resume the recording session by spawning a new ffmpeg part.
+pub fn resume(session: &mut RecordingSession) -> Result<(), String> {
+    capture_log("resume() called");
+    if session.ffmpeg_child.is_some() {
+        return Err("Already recording.".to_string());
+    }
+
+    let now = now_ms();
+    let part_filename = format!("part_{}.mp4", session.parts.len());
+    let part_path = session.project_dir.join(part_filename);
+
+    capture_log(&format!("spawning ffmpeg for resume -> {:?}", part_path));
+    let ffmpeg_child = spawn_screen_capture(&part_path, session.capture_region)
+        .map_err(|e| { capture_log(&format!("spawn_screen_capture resume FAILED: {e}")); e })?;
+    capture_log("spawn_screen_capture resume OK");
+
+    session.parts.push(part_path);
+    session.active_segments.push((now, None));
+    session.ffmpeg_child = Some(ffmpeg_child);
+
+    Ok(())
+}
+
+// Stop the recording session, concat all video parts, shift click event timestamps, and finalize metadata.
+pub fn stop(mut session: RecordingSession, raw_clicks: &[ClickEvent]) -> Result<String, String> {
+    capture_log("stop() called");
+    let now = now_ms();
+
+    // 1. Stop the active ffmpeg process if it is still running
+    if let Some(child) = session.ffmpeg_child.take() {
+        stop_screen_capture(child)?;
+        if let Some(last_segment) = session.active_segments.last_mut() {
+            last_segment.1 = Some(now);
+        }
+    }
+
+    // 2. Filter and shift clicks/hover event timestamps to align with the concatenated video
+    let mut adjusted_clicks = Vec::new();
+    for click in raw_clicks {
+        let t = click.timestamp_ms;
+        let mut elapsed_active = 0;
+
+        for (start, end_opt) in &session.active_segments {
+            let end = end_opt.unwrap_or(now);
+            if t >= *start && t <= end {
+                let offset_in_video = elapsed_active + (t - *start);
+                let mut adjusted_click = click.clone();
+                adjusted_click.timestamp_ms = session.created_at_ms + offset_in_video;
+                adjusted_clicks.push(adjusted_click);
+                break;
+            }
+            elapsed_active += end - *start;
+        }
+    }
+
+    write_click_log(&session.project_dir, &adjusted_clicks)
+        .map_err(|e| { capture_log(&format!("write_click_log FAILED: {e}")); e })?;
+
+    // 3. Concat all video parts
+    if session.parts.is_empty() {
+        return Err("No video files recorded.".to_string());
+    }
+
+    if session.parts.len() == 1 {
+        let part_path = &session.parts[0];
+        std::fs::rename(part_path, &session.video_path)
+            .map_err(|e| format!("Failed to rename part to video.mp4: {e}"))?;
+    } else {
+        concat_videos(&session.project_dir, &session.parts, &session.video_path)?;
+    }
+
+    // Calculate total video duration in ms
+    let total_duration_ms: u64 = session
+        .active_segments
+        .iter()
+        .map(|(start, end_opt)| end_opt.unwrap_or(now) - *start)
+        .sum();
+
+    log::info!("Capture Stopped, total active duration: {:.1}s", (total_duration_ms as f32) / 1000.0);
+
+    // 4. Write finalized manifest
     write_manifest(
         &session.manifest_path,
         &RecordingManifest {
@@ -119,11 +212,63 @@ pub fn stop(session: RecordingSession) -> Result<String, String> {
                 .to_string(),
             clicks_file: "clicks.json".to_string(),
             capture_region: session.capture_region,
-            duration_ms: Some(duration.as_millis()),
+            duration_ms: Some(total_duration_ms as u128),
         },
     )?;
 
+    // 5. Clean up temporary part files
+    for part in &session.parts {
+        if part.exists() {
+            let _ = std::fs::remove_file(part);
+        }
+    }
+
     Ok(session.project_dir.to_string_lossy().to_string())
+}
+
+fn concat_videos(project_dir: &PathBuf, parts: &[PathBuf], output_path: &PathBuf) -> Result<(), String> {
+    let concat_txt_path = project_dir.join("concat.txt");
+    let mut f = std::fs::File::create(&concat_txt_path)
+        .map_err(|e| format!("Failed to create concat.txt: {e}"))?;
+    
+    for part in parts {
+        let file_name = part.file_name().ok_or_else(|| "Invalid part filename".to_string())?;
+        writeln!(f, "file '{}'", file_name.to_string_lossy())
+            .map_err(|e| format!("Failed to write to concat.txt: {e}"))?;
+    }
+    drop(f);
+
+    let ffmpeg_exe = resolve_exe_path("ffmpeg");
+    let mut command = Command::new(&ffmpeg_exe);
+    command
+        .arg("-y")
+        .arg("-f")
+        .arg("concat")
+        .arg("-safe")
+        .arg("0")
+        .arg("-i")
+        .arg("concat.txt")
+        .arg("-c")
+        .arg("copy")
+        .arg(output_path)
+        .current_dir(project_dir)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+
+    #[cfg(target_os = "windows")]
+    {
+        command.creation_flags(0x0800_0000);
+    }
+
+    let status = command.status()
+        .map_err(|e| format!("Failed to execute concat command: {e}"))?;
+
+    let _ = std::fs::remove_file(&concat_txt_path);
+
+    if !status.success() {
+        return Err(format!("ffmpeg concat failed with status: {status}"));
+    }
+    Ok(())
 }
 
 fn spawn_screen_capture(

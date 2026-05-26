@@ -20,7 +20,9 @@ function App() {
   const [status, setStatus] = useState("Ready to record.");
   const [recordingPath, setRecordingPath] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
-  const [recordingStartedAt, setRecordingStartedAt] = useState<number | null>(null);
+  const [isPaused, setIsPaused] = useState(false);
+  const [accumulatedTime, setAccumulatedTime] = useState(0);
+  const [lastActiveTime, setLastActiveTime] = useState<number | null>(null);
   const [recordingElapsedMs, setRecordingElapsedMs] = useState(0);
   const [captureMode, setCaptureMode] = useState<"full" | "region">("full");
   const [isSelectingRegion, setIsSelectingRegion] = useState(false);
@@ -28,18 +30,16 @@ function App() {
   const [selectionRegion, setSelectionRegion] = useState<RecordingRegion | null>(null);
 
   useEffect(() => {
-    if (!isRecording || recordingStartedAt === null) {
+    if (!isRecording || lastActiveTime === null || isPaused) {
       return undefined;
     }
 
-    setRecordingElapsedMs(Date.now() - recordingStartedAt);
-
     const intervalId = window.setInterval(() => {
-      setRecordingElapsedMs(Date.now() - recordingStartedAt);
+      setRecordingElapsedMs(accumulatedTime + (Date.now() - lastActiveTime));
     }, 250);
 
     return () => window.clearInterval(intervalId);
-  }, [isRecording, recordingStartedAt]);
+  }, [isRecording, lastActiveTime, isPaused, accumulatedTime]);
 
   async function startRecording(captureRegion: RecordingRegion | null = null) {
     try {
@@ -48,7 +48,9 @@ function App() {
       });
 
       setIsRecording(true);
-      setRecordingStartedAt(Date.now());
+      setIsPaused(false);
+      setAccumulatedTime(0);
+      setLastActiveTime(Date.now());
       setRecordingElapsedMs(0);
       setRecordingPath(projectDir);
       setStatus(
@@ -186,11 +188,40 @@ function App() {
       const projectDir = await invoke<string>("stop_recording");
 
       setIsRecording(false);
-      setRecordingStartedAt(null);
+      setIsPaused(false);
+      setAccumulatedTime(0);
+      setLastActiveTime(null);
+      setRecordingElapsedMs(0);
       setRecordingPath(projectDir);
       setStatus("Recording session stopped. Project saved.");
     } catch (error) {
       setStatus(String(error));
+    }
+  }
+
+  async function handlePauseResumeClick() {
+    if (isPaused) {
+      try {
+        await invoke("resume_recording");
+        setIsPaused(false);
+        setLastActiveTime(Date.now());
+        setStatus("Recording resumed.");
+      } catch (error) {
+        setStatus(String(error));
+      }
+    } else {
+      try {
+        await invoke("pause_recording");
+        setIsPaused(true);
+        const now = Date.now();
+        const segmentDuration = now - lastActiveTime!;
+        setAccumulatedTime(prev => prev + segmentDuration);
+        setLastActiveTime(null);
+        setRecordingElapsedMs(accumulatedTime + segmentDuration);
+        setStatus("Recording paused.");
+      } catch (error) {
+        setStatus(String(error));
+      }
     }
   }
 
@@ -268,10 +299,19 @@ function App() {
           </p>
 
           <div className="recording-metrics" aria-label="Recording metrics">
-            <span className={`recording-pill ${isRecording ? "live" : "idle"}`}>
-              {isRecording ? "Recording" : "Idle"}
+            <span className={`recording-pill ${isRecording ? (isPaused ? "paused" : "live") : "idle"}`}>
+              {isRecording ? (isPaused ? "Paused" : "Recording") : "Idle"}
             </span>
             <span className="recording-pill recording-time">{formatElapsedTime(recordingElapsedMs)}</span>
+            {isRecording ? (
+              <button
+                className={`recording-pill pause-btn ${isPaused ? "paused" : ""}`}
+                type="button"
+                onClick={handlePauseResumeClick}
+              >
+                {isPaused ? "Resume" : "Pause"}
+              </button>
+            ) : null}
           </div>
 
           <div className="capture-settings" aria-label="Capture settings">

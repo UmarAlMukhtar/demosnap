@@ -11,7 +11,7 @@ use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, DispatchMessageW, GetMessageW, SetWindowsHookExW, TranslateMessage,
     UnhookWindowsHookEx, HHOOK, MSG, MSLLHOOKSTRUCT, WH_MOUSE_LL, WM_LBUTTONDOWN, WM_LBUTTONUP,
-    WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEMOVE, WM_RBUTTONDOWN, WM_RBUTTONUP,
+    WM_MOUSEMOVE,
 };
 
 // This module defines the structure for input events captured during a recording session.
@@ -24,7 +24,7 @@ pub struct ClickEvent {
 }
 
 // A thread-safe structure to store captured input events.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub enum MouseEventType {
     LeftDown,
     LeftUp,
@@ -36,6 +36,7 @@ pub type ClickLog = Arc<Mutex<Vec<ClickEvent>>>;
 
 static ACTIVE_CLICK_LOG: OnceLock<Mutex<Option<ClickLog>>> = OnceLock::new();
 static MOUSE_HOOK_STARTED: OnceLock<()> = OnceLock::new();
+static LAST_MOVE: Mutex<(u64, i32, i32)> = Mutex::new((0, 0, 0));
 
 /// Create a new empty click log
 pub fn new_click_log() -> ClickLog {
@@ -87,22 +88,43 @@ unsafe extern "system" fn mouse_hook_proc(code: i32, w_param: WPARAM, l_param: L
     const HC_ACTION: i32 = 0;
 
     if code == HC_ACTION {
-        let event_type = match w_param.0 as u32 {
+        let msg_type = w_param.0 as u32;
+        let event_type = match msg_type {
             WM_LBUTTONDOWN => Some(MouseEventType::LeftDown),
             WM_LBUTTONUP => Some(MouseEventType::LeftUp),
-            WM_MBUTTONDOWN | WM_MBUTTONUP | WM_RBUTTONDOWN | WM_RBUTTONUP | WM_MOUSEMOVE => None,
+            WM_MOUSEMOVE => Some(MouseEventType::Move),
             _ => None,
         };
 
         if let Some(event_type) = event_type {
             let info = *(l_param.0 as *const MSLLHOOKSTRUCT);
-            if let Some(log) = active_click_log().lock().unwrap().as_ref() {
-                log.lock().unwrap().push(ClickEvent {
-                    timestamp_ms: now_ms(),
-                    x: info.pt.x,
-                    y: info.pt.y,
-                    event_type,
-                });
+            let current_time = now_ms();
+
+            let should_log = match event_type {
+                MouseEventType::Move => {
+                    let mut last = LAST_MOVE.lock().unwrap();
+                    let (last_time, last_x, last_y) = *last;
+                    let time_diff = current_time - last_time;
+                    let coord_changed = info.pt.x != last_x || info.pt.y != last_y;
+                    if time_diff >= 16 && coord_changed {
+                        *last = (current_time, info.pt.x, info.pt.y);
+                        true
+                    } else {
+                        false
+                    }
+                }
+                _ => true,
+            };
+
+            if should_log {
+                if let Some(log) = active_click_log().lock().unwrap().as_ref() {
+                    log.lock().unwrap().push(ClickEvent {
+                        timestamp_ms: current_time,
+                        x: info.pt.x,
+                        y: info.pt.y,
+                        event_type,
+                    });
+                }
             }
         }
     }

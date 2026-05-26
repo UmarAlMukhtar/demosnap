@@ -68,9 +68,32 @@ fn stop_recording(
         .ok_or_else(|| "No active recording session.".to_string())?;
 
     let clicks = click_log.lock().unwrap().clone();
-    capture::write_click_log(&session.project_dir, &clicks)?;
     input::set_active_click_log(None);
-    capture::stop(session)
+    capture::stop(session, &clicks)
+}
+
+#[tauri::command]
+fn pause_recording(
+    recording: State<'_, capture::RecordingState>,
+) -> Result<(), String> {
+    let mut active_session = recording.lock().unwrap();
+    let session = active_session
+        .as_mut()
+        .ok_or_else(|| "No active recording session.".to_string())?;
+
+    capture::pause(session)
+}
+
+#[tauri::command]
+fn resume_recording(
+    recording: State<'_, capture::RecordingState>,
+) -> Result<(), String> {
+    let mut active_session = recording.lock().unwrap();
+    let session = active_session
+        .as_mut()
+        .ok_or_else(|| "No active recording session.".to_string())?;
+
+    capture::resume(session)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -91,7 +114,9 @@ pub fn run() {
             record_click,
             get_click_log,
             start_recording,
-            stop_recording
+            stop_recording,
+            pause_recording,
+            resume_recording
         ])
         .run(tauri::generate_context!())
         .expect("error while running demosnap");
