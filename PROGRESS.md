@@ -2,9 +2,9 @@
 
 This document tracks implementation progress against TIMELINE.md and REQUIREMENTS.md. Updated regularly to reflect current state.
 
-**Last Updated:** 2026-05-26  
+**Current Updated:** 2026-05-26  
 **Current Milestone:** M1 — MVP Recording & Export  
-**Current Phase:** Phase 1.1 (Partial) — Core Recording
+**Current Phase:** Phase 1.2 — Audio Capture
 
 ---
 
@@ -28,16 +28,16 @@ TOTAL V1.0         █░░░░░░░░░░░░░░░░░░░�
 
 ### Phase 1.1: Core Recording
 
-**Target:** Weeks 1–4 | **Status:** 🟡 IN PROGRESS (Week ~2–3)
+**Target:** Weeks 1–4 | **Status:** ✅ DONE (Week ~2-3)
 
 | Requirement | Task | Status | Notes |
 |---|---|---|---|
-| REC-01 | Record primary display at 60fps | ⚠️ IN PROGRESS | Live desktop capture loop added; region capture is now wired through the command path |
-| REC-02 | Record selected region | ⚠️ IN PROGRESS | Drag-to-select region overlay is wired to ffmpeg; needs validation and polish |
-| REC-06 | Pause/resume during recording | ❌ NOT STARTED | State management needed |
+| REC-01 | Record primary display at 60fps | ✅ DONE | Primary display recording at 60fps implemented via gdigrab |
+| REC-02 | Record selected region | ✅ DONE | Drag-to-select region overlay is fully wired and validated |
+| REC-06 | Pause/resume during recording | ✅ DONE | Pause/resume state management and video concatenation complete |
 | REC-08 | Recording indicator UI | ✅ DONE | Live recording pill and elapsed timer shown while recording |
 | INP-01 | Log left clicks with coordinates | ✅ DONE | Global low-level mouse hook records real clicks during recording |
-| INP-03 | Log cursor movement at 60hz | ❌ NOT STARTED | Requires Win32 `SetWindowsHookEx` |
+| INP-03 | Log cursor movement at 60hz | ✅ DONE | Cursor movement tracked at 60Hz using low-level mouse hook |
 | INP-04 | Store click log + video in project | ✅ DONE | Click log is written to `clicks.json` in the project folder on stop |
 | Project file structure | Create `.dsnap` folder format | ✅ DONE | Recording sessions now create `project.json`, `video.mp4`, and `clicks.json` |
 
@@ -137,26 +137,23 @@ All phases blocked on M3 completion.
 - Recording button hover feedback and pointer cursor behavior
 - Live elapsed recording timer and active-state pill
 - Click event data structures (Rust)
-- Global mouse hook for click logging
+- Global low-level mouse hook for click logging (LeftDown/LeftUp)
+- Continuous cursor position tracking at 60Hz (MouseMove)
 - Basic Tauri IPC bridge (invoke/listen)
 - Click log persistence to `clicks.json`
 - `.dsnap` project folder creation with `project.json`, `video.mp4`, and `clicks.json`
 - Recording path opens in file explorer
-- Project folder structure concept
+- Dynamic floating overlay control bar (`recording-control` window) with glassmorphic UI, Pause/Resume, and Stop actions
+- Animated countdown (3, 2, 1, START) before capture begins
+- Region selection overlay with custom mouse dragging
+- Pause/resume state management with segment concatenation
 - Robust executable path resolution for ffmpeg bypassing RedirectionGuard symlink security mitigations in MSI packages (fixes ERROR_UNTRUSTED_MOUNT_POINT / os error 448)
 
 ### What's Stubbed 🟡
-- `capture.rs`: Starts live desktop capture and now accepts a capture rectangle, but still needs validation and tuning
-- Recording start/stop: Session plumbing exists, using ffmpeg desktop capture
-- Project file format: Structure defined, no I/O implemented
-- Export pipeline: No FFmpeg integration
+- Export pipeline: Video + audio muxing (Phase 1.3)
 
 ### What's Missing ❌
-- **Screen capture** — region selection and reliability tuning not integrated yet
-- **Recording UX** — no stop-state distinction beyond current toggle button
-- **Cursor tracking** — No continuous movement logging (60hz)
-- **Audio capture** — Not started
-- **Video encoding** — FFmpeg not integrated
+- **Audio capture** — Not started (Phase 1.2)
 - **Error handling** — No graceful failures for missing disk space, etc.
 
 ---

@@ -15,7 +15,20 @@
         "label": "main",
         "title": "demosnap",
         "width": 800,
-        "height": 600
+        "height": 600,
+        "transparent": true
+      },
+      {
+        "label": "recording-control",
+        "title": "Demosnap Control",
+        "width": 320,
+        "height": 80,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "resizable": false,
+        "transparent": true,
+        "visible": false,
+        "skipTaskbar": true
       }
     ],
     "security": {
