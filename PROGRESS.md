@@ -77,7 +77,7 @@ TOTAL V1.0         ███░░░░░░░░░░░░░░░░░�
 | Requirement | Task | Status | Notes |
 |---|---|---|---|
 | REC-03 | Record microphone audio | ✅ DONE | Auto-detect default microphone via COM/WASAPI, capture raw WAV files via FFmpeg DirectShow, and concat parts during pause/resume |
-| REC-04 | Record system audio | ✅ DONE | Auto-detect default playback device via COM/WASAPI, capture raw WAV via FFmpeg loopback, and concat parts |
+| REC-04 | Record system audio | ✅ DONE | Auto-detect default playback device via COM/WASAPI, capture raw WAV natively via `cpal` + `hound`, and concat parts |
  
 **Blockers:**
 - None ✅
@@ -148,7 +148,7 @@ All phases blocked on M3 completion.
 - Pause/resume state management with segment concatenation
 - Robust executable path resolution for ffmpeg bypassing RedirectionGuard symlink security mitigations in MSI packages (fixes ERROR_UNTRUSTED_MOUNT_POINT / os error 448)
 - Microphone audio capture via FFmpeg DirectShow with automatic default recording endpoint discovery using COM WASAPI
-- System audio capture via FFmpeg WASAPI loopback with automatic default playback endpoint discovery
+- System audio capture natively via `cpal` + `hound` WASAPI loopback with automatic default playback endpoint discovery
 - Audio pause/resume/stop segments synchronization and concatenation
 - Active microphone name and status indicator display in React UI
 

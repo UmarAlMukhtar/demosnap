@@ -1,6 +1,7 @@
 mod capture;
 mod input;
 mod audio;
+mod sys_audio;
 
 use std::sync::Mutex;
 use tauri::State;

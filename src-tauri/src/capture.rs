@@ -40,7 +40,7 @@ pub struct RecordingSession {
     pub active_segments: Vec<(u64, Option<u64>)>, // (start_ms, Option<end_ms>)
     pub ffmpeg_child: Option<Child>,              // None if paused (video process)
     pub ffmpeg_audio_child: Option<Child>,        // None if paused/not recording (audio process)
-    pub ffmpeg_sys_audio_child: Option<Child>,
+    pub sys_audio_stop_tx: Option<crossbeam_channel::Sender<()>>,
     pub audio_recording_enabled: bool,
     pub sys_audio_recording_enabled: bool,
 }
@@ -113,17 +113,17 @@ pub fn start(
     }
 
     // System Audio capture setup
-    let mut ffmpeg_sys_audio_child = None;
+    let mut sys_audio_stop_tx = None;
     let mut sys_audio_recording_enabled = false;
     let mut system_audio_parts = Vec::new();
 
     match crate::audio::get_default_render_name() {
         Ok(Some(render_name)) => {
             log::info!("Recording system audio using device: {}", render_name);
-            capture_log(&format!("spawning ffmpeg sys audio -> {:?}", first_system_audio_part));
-            match spawn_system_audio_capture(&first_system_audio_part, &render_name) {
+            capture_log(&format!("spawning cpal sys audio -> {:?}", first_system_audio_part));
+            match crate::sys_audio::spawn_system_audio_capture(&first_system_audio_part, &render_name) {
                 Ok(child) => {
-                    ffmpeg_sys_audio_child = Some(child);
+                    sys_audio_stop_tx = Some(child);
                     sys_audio_recording_enabled = true;
                     system_audio_parts.push(first_system_audio_part);
                     capture_log("spawn_system_audio_capture OK");
@@ -182,7 +182,7 @@ pub fn start(
         active_segments: vec![(created_at_ms, None)],
         ffmpeg_child: Some(ffmpeg_child),
         ffmpeg_audio_child,
-        ffmpeg_sys_audio_child,
+        sys_audio_stop_tx,
         audio_recording_enabled,
         sys_audio_recording_enabled,
     })
@@ -200,10 +200,8 @@ pub fn pause(session: &mut RecordingSession) -> Result<(), String> {
         }
     }
 
-    if let Some(sys_audio_child) = session.ffmpeg_sys_audio_child.take() {
-        if let Err(e) = stop_screen_capture(sys_audio_child) {
-            log::warn!("Failed to stop system audio capture on pause: {}", e);
-        }
+    if let Some(sys_audio_tx) = session.sys_audio_stop_tx.take() {
+        let _ = sys_audio_tx.send(());
     }
 
     let now = now_ms();
@@ -262,10 +260,10 @@ pub fn resume(session: &mut RecordingSession) -> Result<(), String> {
             Ok(Some(render_name)) => {
                 let sys_audio_part_filename = format!("system_audio_part_{}.wav", session.system_audio_parts.len());
                 let sys_audio_part_path = session.project_dir.join(sys_audio_part_filename);
-                capture_log(&format!("spawning ffmpeg sys audio for resume -> {:?}", sys_audio_part_path));
-                match spawn_system_audio_capture(&sys_audio_part_path, &render_name) {
-                    Ok(sys_audio_child) => {
-                        session.ffmpeg_sys_audio_child = Some(sys_audio_child);
+                capture_log(&format!("spawning cpal sys audio for resume -> {:?}", sys_audio_part_path));
+                match crate::sys_audio::spawn_system_audio_capture(&sys_audio_part_path, &render_name) {
+                    Ok(tx) => {
+                        session.sys_audio_stop_tx = Some(tx);
                         session.system_audio_parts.push(sys_audio_part_path);
                         capture_log("spawn_system_audio_capture resume OK");
                     }
@@ -306,10 +304,8 @@ pub fn stop(mut session: RecordingSession, raw_clicks: &[ClickEvent]) -> Result<
         }
     }
 
-    if let Some(sys_audio_child) = session.ffmpeg_sys_audio_child.take() {
-        if let Err(e) = stop_screen_capture(sys_audio_child) {
-            log::warn!("Failed to stop system audio capture on stop: {}", e);
-        }
+    if let Some(sys_audio_tx) = session.sys_audio_stop_tx.take() {
+        let _ = sys_audio_tx.send(());
     }
 
     // 2. Filter and shift clicks/hover event timestamps to align with the concatenated video
@@ -335,37 +331,56 @@ pub fn stop(mut session: RecordingSession, raw_clicks: &[ClickEvent]) -> Result<
         .map_err(|e| { capture_log(&format!("write_click_log FAILED: {e}")); e })?;
 
     // 3. Concat all video parts
-    if session.video_parts.is_empty() {
-        return Err("No video files recorded.".to_string());
-    }
-
-    if session.video_parts.len() == 1 {
-        let part_path = &session.video_parts[0];
-        std::fs::rename(part_path, &session.video_path)
-            .map_err(|e| format!("Failed to rename part to video.mp4: {e}"))?;
-    } else {
-        concat_files(&session.project_dir, &session.video_parts, &session.video_path, "concat_video.txt")?;
-    }
-
-    // 3b. Concat all audio parts (if any were recorded)
-    if !session.audio_parts.is_empty() {
-        if session.audio_parts.len() == 1 {
-            let part_path = &session.audio_parts[0];
-            std::fs::rename(part_path, &session.audio_path)
-                .map_err(|e| format!("Failed to rename audio part to audio.wav: {e}"))?;
-        } else {
-            concat_files(&session.project_dir, &session.audio_parts, &session.audio_path, "concat_audio.txt")?;
+    let mut valid_video_parts = Vec::new();
+    for p in &session.video_parts {
+        if p.exists() && p.metadata().map(|m| m.len()).unwrap_or(0) > 0 {
+            valid_video_parts.push(p.clone());
         }
     }
 
-    // 3c. Concat all system audio parts (if any were recorded)
-    if !session.system_audio_parts.is_empty() {
-        if session.system_audio_parts.len() == 1 {
-            let part_path = &session.system_audio_parts[0];
-            std::fs::rename(part_path, &session.system_audio_path)
-                .map_err(|e| format!("Failed to rename system audio part to system_audio.wav: {e}"))?;
+    if valid_video_parts.is_empty() {
+        return Err("No video files recorded.".to_string());
+    }
+
+    if valid_video_parts.len() == 1 {
+        let part_path = &valid_video_parts[0];
+        std::fs::rename(part_path, &session.video_path)
+            .map_err(|e| format!("Failed to rename part to video.mp4: {e}"))?;
+    } else {
+        concat_files(&session.project_dir, &valid_video_parts, &session.video_path, "concat_video.txt")?;
+    }
+
+    // 3b. Concat all audio parts (if any were recorded)
+    let mut valid_audio_parts = Vec::new();
+    for p in &session.audio_parts {
+        if p.exists() && p.metadata().map(|m| m.len()).unwrap_or(0) > 0 {
+            valid_audio_parts.push(p.clone());
+        }
+    }
+
+    if !valid_audio_parts.is_empty() {
+        if valid_audio_parts.len() == 1 {
+            let part_path = &valid_audio_parts[0];
+            std::fs::rename(part_path, &session.audio_path)
+                .map_err(|e| format!("Failed to rename audio part to audio.wav: {e}"))?;
         } else {
-            concat_files(&session.project_dir, &session.system_audio_parts, &session.system_audio_path, "concat_sys_audio.txt")?;
+            let _ = concat_files(&session.project_dir, &valid_audio_parts, &session.audio_path, "concat_audio.txt");
+        }
+    }
+
+    let mut valid_sys_audio_parts = Vec::new();
+    for p in &session.system_audio_parts {
+        if p.exists() && p.metadata().map(|m| m.len()).unwrap_or(0) > 0 {
+            valid_sys_audio_parts.push(p.clone());
+        }
+    }
+
+    if !valid_sys_audio_parts.is_empty() {
+        if valid_sys_audio_parts.len() == 1 {
+            let part_path = &valid_sys_audio_parts[0];
+            let _ = std::fs::rename(part_path, &session.system_audio_path);
+        } else {
+            let _ = concat_files(&session.project_dir, &valid_sys_audio_parts, &session.system_audio_path, "concat_sys_audio.txt");
         }
     }
 
@@ -392,7 +407,7 @@ pub fn stop(mut session: RecordingSession, raw_clicks: &[ClickEvent]) -> Result<
                 .unwrap_or_default()
                 .to_string_lossy()
                 .to_string(),
-            audio_file: if !session.audio_parts.is_empty() {
+            audio_file: if session.audio_path.exists() {
                 Some(
                     session
                         .audio_path
@@ -404,7 +419,7 @@ pub fn stop(mut session: RecordingSession, raw_clicks: &[ClickEvent]) -> Result<
             } else {
                 None
             },
-            system_audio_file: if !session.system_audio_parts.is_empty() {
+            system_audio_file: if session.system_audio_path.exists() {
                 Some(
                     session
                         .system_audio_path
@@ -684,20 +699,27 @@ fn normalize_capture_region(region: RecordingRegion) -> RecordingRegion {
 
 fn stop_screen_capture(mut child: Child) -> Result<(), String> {
     if let Some(mut stdin) = child.stdin.take() {
-        send_ffmpeg_quit(&mut stdin)?;
+        let _ = send_ffmpeg_quit(&mut stdin);
     }
 
-    let status = child.wait().map_err(|error| error.to_string())?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(format!("ffmpeg exited with status: {status}"))
-    }
+    let _ = child.wait();
+    Ok(())
 }
 
 fn send_ffmpeg_quit(stdin: &mut ChildStdin) -> Result<(), String> {
-    stdin.write_all(b"q\n").map_err(|error| error.to_string())?;
-    stdin.flush().map_err(|error| error.to_string())
+    if let Err(e) = stdin.write_all(b"q\n") {
+        if e.kind() == std::io::ErrorKind::BrokenPipe {
+            return Ok(());
+        }
+        return Err(e.to_string());
+    }
+    if let Err(e) = stdin.flush() {
+        if e.kind() == std::io::ErrorKind::BrokenPipe {
+            return Ok(());
+        }
+        return Err(e.to_string());
+    }
+    Ok(())
 }
 
 // Write a diagnostic line to %TEMP%\demosnap_capture.log
@@ -779,31 +801,5 @@ pub fn write_click_log(project_dir: &PathBuf, events: &[ClickEvent]) -> Result<P
     let click_log_json = serde_json::to_string_pretty(events).map_err(|error| error.to_string())?;
     fs::write(&click_log_path, click_log_json).map_err(|error| error.to_string())?;
     Ok(click_log_path)
-}
-
-fn spawn_system_audio_capture(output_path: &PathBuf, device_name: &str) -> Result<Child, String> {
-    let ffmpeg_exe = resolve_exe_path("ffmpeg");
-    let mut command = Command::new(&ffmpeg_exe);
-
-    // ffmpeg -f wasapi -loop 1 -i "Device Name" -c:a pcm_s16le output.wav
-    command
-        .args([
-            "-y",
-            "-f", "wasapi",
-            "-loop", "1",
-            "-i", device_name,
-            "-c:a", "pcm_s16le",
-        ])
-        .arg(output_path)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
-
-    #[cfg(target_os = "windows")]
-    {
-        command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
-    }
-
-    command.spawn().map_err(|e| format!("Failed to spawn system audio capture: {e}"))
 }
 
