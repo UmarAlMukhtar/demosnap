@@ -497,7 +497,8 @@ button:disabled {
 }
 
 .main-window-wrapper.transparent-bg {
-  background: rgba(15, 23, 42, 0.15); /* Transparent dark overlay for fullscreen select */
+  background: rgba(15, 23, 42, 0.15);
+  /* Transparent dark overlay for fullscreen select */
 }
 
 /* Floating Control Bar Overlay */
@@ -532,8 +533,13 @@ button:disabled {
 }
 
 @keyframes countdown-pulse {
-  0% { transform: scale(0.95); }
-  100% { transform: scale(1.05); }
+  0% {
+    transform: scale(0.95);
+  }
+
+  100% {
+    transform: scale(1.05);
+  }
 }
 
 .control-bar {
@@ -581,9 +587,17 @@ button:disabled {
 }
 
 @keyframes recording-dot-pulse {
-  0% { opacity: 0.5; }
-  50% { opacity: 1; }
-  100% { opacity: 0.5; }
+  0% {
+    opacity: 0.5;
+  }
+
+  50% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0.5;
+  }
 }
 
 .control-time {
@@ -860,5 +874,4 @@ button:disabled {
 
 .export-success-btn:hover {
   background: #166534;
-}
 }

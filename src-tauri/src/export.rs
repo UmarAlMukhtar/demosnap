@@ -37,20 +37,10 @@ pub fn export_recording(
 
     // Check for any recorded audio track in the project directory
     let audio_wav = project_path.join("audio.wav");
-    let audio_aac = project_path.join("audio.aac");
-    let audio_m4a = project_path.join("audio.m4a");
-    let audio_mp3 = project_path.join("audio.mp3");
-    let audio_path = if audio_wav.exists() {
-        Some(audio_wav)
-    } else if audio_aac.exists() {
-        Some(audio_aac)
-    } else if audio_m4a.exists() {
-        Some(audio_m4a)
-    } else if audio_mp3.exists() {
-        Some(audio_mp3)
-    } else {
-        None
-    };
+    let system_audio_wav = project_path.join("system_audio.wav");
+
+    let mic_audio_exists = audio_wav.exists() && audio_wav.metadata().map(|m| m.len()).unwrap_or(0) > 0;
+    let sys_audio_exists = system_audio_wav.exists() && system_audio_wav.metadata().map(|m| m.len()).unwrap_or(0) > 0;
 
     // 1. Read duration from project.json to calculate progress percentage
     let duration_ms = if manifest_path.exists() {
@@ -70,36 +60,53 @@ pub fn export_recording(
     // 2. Perform direct copy/mux if output settings match the input video
     if resolution == "Original" && framerate == "60 fps" {
         app_handle.emit("export-progress", 10).ok();
-        if let Some(ref audio) = audio_path {
-            // Mux video and audio streams instantly using FFmpeg copy
-            let ffmpeg_exe = crate::capture::resolve_exe_path("ffmpeg");
-            let mut cmd = Command::new(&ffmpeg_exe);
-            cmd.arg("-y")
-               .arg("-i").arg(&input_video)
-               .arg("-i").arg(audio)
+        
+        let ffmpeg_exe = crate::capture::resolve_exe_path("ffmpeg");
+        let mut cmd = Command::new(&ffmpeg_exe);
+        cmd.arg("-y")
+           .arg("-i").arg(&input_video);
+
+        if mic_audio_exists && sys_audio_exists {
+            cmd.arg("-i").arg(&audio_wav)
+               .arg("-i").arg(&system_audio_wav)
+               .arg("-filter_complex").arg("[1:a][2:a]amix=inputs=2:duration=longest[a]")
+               .arg("-map").arg("0:v")
+               .arg("-map").arg("[a]")
                .arg("-c:v").arg("copy")
-               .arg("-c:a").arg("aac")
-               .arg(&output_path);
-
-            cmd.stdout(Stdio::null())
-               .stderr(Stdio::null());
-
-            #[cfg(target_os = "windows")]
-            {
-                use std::os::windows::process::CommandExt;
-                cmd.creation_flags(0x0800_0000);
-            }
-
-            let mut child = cmd.spawn().map_err(|e| format!("Failed to spawn FFmpeg for muxing: {e}"))?;
-            let status = child.wait().map_err(|e| format!("FFmpeg muxing failed: {e}"))?;
-            if !status.success() {
-                return Err("FFmpeg audio/video muxing failed.".to_string());
-            }
+               .arg("-c:a").arg("aac");
+        } else if mic_audio_exists {
+            cmd.arg("-i").arg(&audio_wav)
+               .arg("-map").arg("0:v")
+               .arg("-map").arg("1:a")
+               .arg("-c:v").arg("copy")
+               .arg("-c:a").arg("aac");
+        } else if sys_audio_exists {
+            cmd.arg("-i").arg(&system_audio_wav)
+               .arg("-map").arg("0:v")
+               .arg("-map").arg("1:a")
+               .arg("-c:v").arg("copy")
+               .arg("-c:a").arg("aac");
         } else {
-            // Direct filesystem copy (no audio present)
-            std::fs::copy(&input_video, &output_path)
-                .map_err(|e| format!("Failed to copy video to output destination: {e}"))?;
+            cmd.arg("-c:v").arg("copy");
         }
+
+        cmd.arg(&output_path);
+
+        cmd.stdout(Stdio::null())
+           .stderr(Stdio::null());
+
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x0800_0000);
+        }
+
+        let mut child = cmd.spawn().map_err(|e| format!("Failed to spawn FFmpeg for muxing: {e}"))?;
+        let status = child.wait().map_err(|e| format!("FFmpeg muxing failed: {e}"))?;
+        if !status.success() {
+            return Err("FFmpeg audio/video muxing failed.".to_string());
+        }
+        
         app_handle.emit("export-progress", 100).ok();
         return Ok(());
     }
@@ -109,11 +116,24 @@ pub fn export_recording(
     let mut cmd = Command::new(&ffmpeg_exe);
 
     cmd.arg("-y")
-       .arg("-i")
-       .arg(&input_video);
+       .arg("-i").arg(&input_video);
 
-    if let Some(ref audio) = audio_path {
-        cmd.arg("-i").arg(audio);
+    if mic_audio_exists && sys_audio_exists {
+        cmd.arg("-i").arg(&audio_wav)
+           .arg("-i").arg(&system_audio_wav)
+           .arg("-filter_complex").arg("[1:a][2:a]amix=inputs=2:duration=longest[a]")
+           .arg("-map").arg("0:v")
+           .arg("-map").arg("[a]");
+    } else if mic_audio_exists {
+        cmd.arg("-i").arg(&audio_wav)
+           .arg("-map").arg("0:v")
+           .arg("-map").arg("1:a");
+    } else if sys_audio_exists {
+        cmd.arg("-i").arg(&system_audio_wav)
+           .arg("-map").arg("0:v")
+           .arg("-map").arg("1:a");
+    } else {
+        cmd.arg("-map").arg("0:v");
     }
 
     // Apply scale conversion if 1080p is selected
@@ -133,7 +153,7 @@ pub fn export_recording(
        .arg("-preset").arg("veryfast")
        .arg("-pix_fmt").arg("yuv420p");
 
-    if audio_path.is_some() {
+    if mic_audio_exists || sys_audio_exists {
         cmd.arg("-c:a").arg("aac");
     }
 
