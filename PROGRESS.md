@@ -2,7 +2,7 @@
 
 This document tracks implementation progress against TIMELINE.md and REQUIREMENTS.md. Updated regularly to reflect current state.
 
-**Last Updated:** 2026-05-25  
+**Last Updated:** 2026-05-26  
 **Current Milestone:** M1 — MVP Recording & Export  
 **Current Phase:** Phase 1.1 (Partial) — Core Recording
 
@@ -143,6 +143,7 @@ All phases blocked on M3 completion.
 - `.dsnap` project folder creation with `project.json`, `video.mp4`, and `clicks.json`
 - Recording path opens in file explorer
 - Project folder structure concept
+- Robust executable path resolution for ffmpeg bypassing RedirectionGuard symlink security mitigations in MSI packages (fixes ERROR_UNTRUSTED_MOUNT_POINT / os error 448)
 
 ### What's Stubbed 🟡
 - `capture.rs`: Starts live desktop capture and now accepts a capture rectangle, but still needs validation and tuning
@@ -212,6 +213,7 @@ All phases blocked on M3 completion.
 
 | Commit | Feature | Phase | Status |
 |---|---|---|---|
+| TBD | Fix ERROR_UNTRUSTED_MOUNT_POINT in MSI package | 1.1 | ✅ Complete |
 | 7cb4586 | Initial Tauri + React scaffold | Setup | ✅ Complete |
 | f24a7cf | Capture module skeleton | 1.1 | ⚠️ Stub only |
 | 9b5a301 | Click logging + test recording | 1.1 | ⚠️ Partial (test only) |

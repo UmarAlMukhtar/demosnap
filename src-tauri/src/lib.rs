@@ -36,6 +36,7 @@ fn get_click_log(log: State<'_, input::ClickLog>) -> Vec<input::ClickEvent> {
 
 #[tauri::command]
 fn start_recording(
+    app: tauri::AppHandle,
     recording: State<'_, capture::RecordingState>,
     click_log: State<'_, input::ClickLog>,
     capture_region: Option<capture::RecordingRegion>,
@@ -46,12 +47,13 @@ fn start_recording(
         return Err("A recording is already in progress.".to_string());
     }
 
-    let session = capture::start(capture_region)?;
+    let session = capture::start(&app, capture_region)?;
     click_log.lock().unwrap().clear();
     input::set_active_click_log(Some(click_log.inner().clone()));
     let project_dir = session.project_dir.to_string_lossy().to_string();
     *active_session = Some(session);
 
+    log::info!("Recording started, project dir: {}", project_dir);
     Ok(project_dir)
 }
 
@@ -73,14 +75,14 @@ fn stop_recording(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    println!("APP STARTING - you should see this");
-    env_logger::init();
+    let _ = env_logger::try_init();
 
     let click_log = input::new_click_log();
     input::start_mouse_hook_thread();
     let recording_state: capture::RecordingState = Mutex::new(None);
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_fs::init())
         .plugin(opener_init())
         .manage(click_log)
         .manage(recording_state)

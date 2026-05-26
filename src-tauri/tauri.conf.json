@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "demosnap",
         "width": 800,
         "height": 600
@@ -31,5 +32,6 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
-  }
-}
+  },
+  "plugins": {}
+}

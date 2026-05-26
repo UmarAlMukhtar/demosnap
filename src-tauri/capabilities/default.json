@@ -6,6 +6,12 @@
   "permissions": [
     "core:default",
     "opener:default",
-    "opener:allow-open-path"
+    "opener:allow-open-path",
+    "fs:default",
+    "fs:allow-write-text-file",
+    "fs:allow-read-text-file",
+    "fs:allow-mkdir",
+    "fs:allow-exists",
+    "fs:scope-applocaldata-recursive"
   ]
 }
