@@ -40,10 +40,28 @@ function App() {
   const [countdown, setCountdown] = useState<number | null>(null);
   const [targetRegion, setTargetRegion] = useState<RecordingRegion | null>(null);
 
+  // Microphone states
+  const [microphoneName, setMicrophoneName] = useState<string | null>(null);
+  const [micChecked, setMicChecked] = useState<boolean>(false);
+
   const currentWindow = getCurrentWindow();
 
   useEffect(() => {
     setWindowLabel(currentWindow.label);
+  }, []);
+
+  useEffect(() => {
+    async function checkMicrophone() {
+      try {
+        const name = await invoke<string | null>("get_microphone_status");
+        setMicrophoneName(name);
+      } catch (err) {
+        console.error("Failed to check microphone status:", err);
+      } finally {
+        setMicChecked(true);
+      }
+    }
+    void checkMicrophone();
   }, []);
 
   // Timer interval updating
@@ -379,6 +397,16 @@ function App() {
             <div className="control-info" onPointerDown={handleDragStart} data-tauri-drag-region="true">
               <span className={`control-status-dot ${isPaused ? "paused" : "recording"}`} />
               <span className="control-time">{formatElapsedTime(recordingElapsedMs)}</span>
+              {micChecked && (
+                <span 
+                  className={`control-mic-icon ${microphoneName ? "active" : "inactive"}`} 
+                  title={microphoneName ? `Microphone: ${microphoneName}` : "No microphone detected (video-only)"}
+                  role="img"
+                  aria-label={microphoneName ? `Microphone: ${microphoneName}` : "No microphone detected (video-only)"}
+                >
+                  {microphoneName ? "🎤" : "🔇"}
+                </span>
+              )}
             </div>
             <div className="control-actions">
               <button
@@ -445,6 +473,14 @@ function App() {
                 {isRecording ? "Recording" : "Idle"}
               </span>
               <span className="recording-pill recording-time">{formatElapsedTime(recordingElapsedMs)}</span>
+              {micChecked && (
+                <span className={`recording-pill mic-status-pill ${microphoneName ? "active" : "inactive"}`}>
+                  <span className="mic-dot" />
+                  <span className="mic-label">
+                    {microphoneName ? microphoneName : "No Mic (Video-Only)"}
+                  </span>
+                </span>
+              )}
             </div>
 
             <div className="capture-settings" aria-label="Capture settings">

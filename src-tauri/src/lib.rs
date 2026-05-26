@@ -1,5 +1,7 @@
 mod capture;
 mod input;
+mod audio;
+mod sys_audio;
 
 use std::sync::Mutex;
 use tauri::State;
@@ -96,6 +98,11 @@ fn resume_recording(
     capture::resume(session)
 }
 
+#[tauri::command]
+fn get_microphone_status() -> Result<Option<String>, String> {
+    audio::get_default_microphone_name()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let _ = env_logger::try_init();
@@ -116,7 +123,8 @@ pub fn run() {
             start_recording,
             stop_recording,
             pause_recording,
-            resume_recording
+            resume_recording,
+            get_microphone_status
         ])
         .run(tauri::generate_context!())
         .expect("error while running demosnap");
