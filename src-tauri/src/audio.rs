@@ -1,8 +1,13 @@
+#[cfg(target_os = "windows")]
 use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED, CLSCTX_ALL, CoTaskMemFree, STGM_READ};
+#[cfg(target_os = "windows")]
 use windows::Win32::Media::Audio::{MMDeviceEnumerator, IMMDeviceEnumerator, eCapture, eRender, eConsole};
+#[cfg(target_os = "windows")]
 use windows::Win32::UI::Shell::PropertiesSystem::{IPropertyStore, PROPERTYKEY};
+#[cfg(target_os = "windows")]
 use windows::Win32::System::Com::StructuredStorage::PropVariantToStringAlloc;
 
+#[cfg(target_os = "windows")]
 const PKEY_DEVICE_FRIENDLY_NAME: PROPERTYKEY = PROPERTYKEY {
     fmtid: windows::core::GUID::from_u128(0xa45c254e_df1c_4efd_8020_67d146a850e0),
     pid: 14,
@@ -10,6 +15,7 @@ const PKEY_DEVICE_FRIENDLY_NAME: PROPERTYKEY = PROPERTYKEY {
 
 /// Retrieve the friendly name of the default audio capture endpoint (microphone) on Windows.
 /// Returns Ok(None) if no recording device is active or connected.
+#[cfg(target_os = "windows")]
 pub fn get_default_microphone_name() -> Result<Option<String>, String> {
     unsafe {
         // Initialize COM (returns S_FALSE if already initialized on this thread, which is fine)
@@ -77,6 +83,7 @@ pub fn get_default_microphone_name() -> Result<Option<String>, String> {
 
 /// Retrieve the friendly name of the default audio render endpoint (speakers/system audio) on Windows.
 /// Returns Ok(None) if no playback device is active or connected.
+#[cfg(target_os = "windows")]
 pub fn get_default_render_name() -> Result<Option<String>, String> {
     unsafe {
         let com_initialized = CoInitializeEx(None, COINIT_MULTITHREADED).is_ok();
@@ -138,5 +145,15 @@ pub fn get_default_render_name() -> Result<Option<String>, String> {
         }
         result
     }
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn get_default_microphone_name() -> Result<Option<String>, String> {
+    Ok(None)
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn get_default_render_name() -> Result<Option<String>, String> {
+    Ok(None)
 }
 
