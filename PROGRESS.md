@@ -31,7 +31,7 @@ TOTAL V1.0         ████████░░░░░░░░░░░░�
 
 | Requirement | Task | Status | Notes |
 |---|---|---|---|
-| REC-01 | Record primary display at 60fps | ✅ DONE | Primary display recording at 60fps implemented via gdigrab |
+| REC-01 | Record primary display at 60fps | ✅ DONE | Primary display recording at 60fps implemented via ddagrab |
 | REC-02 | Record selected region | ✅ DONE | Drag-to-select region overlay is fully wired and validated |
 | REC-06 | Pause/resume during recording | ✅ DONE | Pause/resume state management and video concatenation complete |
 | REC-08 | Recording indicator UI | ✅ DONE | Live recording pill and elapsed timer shown while recording |
@@ -55,16 +55,15 @@ TOTAL V1.0         ████████░░░░░░░░░░░░�
 - [x] Recording path opens in file explorer
 
 **Blockers:**
-- Screen capture implementation (scap/DXGI integration) — high complexity
-- Real mouse hook implementation — requires low-level Win32 API
+- None (Screen capture implemented via FFmpeg `gdigrab`; mouse hook implemented via Win32 low-level mouse hook API).
 
 **Code Review Status:**
 ```
 ✅ Click event struct (input.rs) — well-designed, serializable
 ✅ Basic UI (App.tsx) — displays click log correctly
-⚠️  Capture module skeleton (capture.rs) — just a stub, not functional
-❌ No screen capture backend — using scap TBD
-❌ No real event logging — only test clicks
+✅ Capture module (capture.rs) — fully functional with pause/resume/stop orchestration
+✅ Screen capture backend — implemented using FFmpeg gdigrab
+✅ Real event logging — implemented using WH_MOUSE_LL hooks
 ```
 
 ---
@@ -187,9 +186,7 @@ All phases blocked on M3 completion.
 
 | Issue | Severity | Impact | Mitigation |
 |---|---|---|---|
-| Capture tuning still needed | 🟡 High | Region/fullscreen recording needs validation | Test `gdigrab` region args and frame stability |
-| No real mouse hook | 🔴 Critical | Click logging won't work on real usage | Use Win32 API; test thoroughly |
-| No persistence layer | 🟡 High | Projects lost on close | Implement JSON serialization + file I/O |
+| Capture tuning still needed | 🟡 High | Region/fullscreen recording needs validation | Test `ddagrab` region args and frame stability |
 | Frame dropping risk at 60fps | 🟡 High | Poor user experience | Profile early; may need buffering strategy |
 | FFmpeg dependency size | 🟠 Medium | Installer > 100MB | Defer bundling; provide install link in M4 |
 | Cross-platform audio capture | 🟠 Medium | Timeline risk for Mac/Linux | Focus on Windows in M1; defer others to M3 |

@@ -338,7 +338,7 @@ Phase 4.x: Release prep (requires M3)
 |------|--------|-----------|
 | FFmpeg integration delays | Blocks M1 export | Start early, use known version |
 | Cross-platform audio capture | Delays M1 | Windows-only in M1, macOS/Linux in M3 |
-| 60fps frame dropping on weak hardware | Blocks M4 | Use `scap` which is optimized; profile early |
+| 60fps frame dropping on weak hardware | Blocks M4 | Use GPU-accelerated desktop duplication (`ddagrab`) and ultrafast encoding preset |
 | Whisper model download size | Exceeds 100MB installer | Don't bundle; download on first use |
 | Subtitle sync accuracy | User-facing quality | Manual sync adjustment UI + testing |
 
@@ -357,6 +357,21 @@ Phase 4.x: Release prep (requires M3)
 
 1. **Windows first:** M1–M3 target Windows only; macOS/Linux in M4 or post-launch
 2. **Single monitor:** v1 does not support multi-monitor setups
-3. **FFmpeg bundled or pre-installed:** Installer includes FFmpeg or provides installation link
+3. **FFmpeg bundled or pre-installed:** Installer bundles a customized, stripped-down FFmpeg sidecar binary to keep size minimal (~15–20MB)
 4. **Whisper runs locally:** No cloud API calls; model downloaded at first use
 5. **Maximum recording length:** TBD (see Open Questions in REQUIREMENTS.md)
+
+---
+
+## Production Capture & Export Evolution Roadmap
+
+To transition Demosnap from a functional MVP to a production-grade commercial release, the media pipeline will evolve as follows:
+
+### Phase 1: Custom FFmpeg Sidecar (Milestone 4 / Initial Public Release)
+- **Architecture:** Continue spawning FFmpeg as a background subprocess, but package it as a Tauri Sidecar.
+- **Optimization:** Compile a custom, stripped-down version of FFmpeg containing only the codecs and devices needed (e.g. `ddagrab`, `libx264`, `aac`, `amix`, `concat`), reducing executable size from 100MB+ to ~15–20MB.
+
+### Phase 2: Direct C-Library Linking & Native Capture (Post-1.0 Commercial Release)
+- **Architecture:** Move away from subprocess execution entirely. Link the Rust backend directly to the FFmpeg shared libraries (`libavcodec`, `libavformat`, etc.) using dynamic linking.
+- **Native Capture:** Replace FFmpeg screen grabbing with direct OS-native capture APIs (e.g., `Windows.Graphics.Capture` via the `windows-rs` crate on Windows, and `ScreenCaptureKit` on macOS).
+- **Encoding Pipeline:** Feed raw frame/audio buffers directly from the native capture loops into the linked FFmpeg encoder in memory. This eliminates spawned process management and provides maximum performance and crash resilience.

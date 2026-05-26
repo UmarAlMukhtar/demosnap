@@ -39,64 +39,100 @@ pub fn spawn_system_audio_capture(
 
     let (tx, rx) = crossbeam_channel::bounded::<()>(1);
     
-    let writer_clone = writer.clone();
-    
     std::thread::spawn(move || {
         let err_fn = move |err| {
             log::error!("an error occurred on stream: {}", err);
         };
 
-        let stream = match sample_format {
-            cpal::SampleFormat::F32 => device.build_input_stream(
-                &config,
-                move |data: &[f32], _: &_| {
-                    if let Ok(mut w) = writer_clone.lock() {
-                        if let Some(writer) = w.as_mut() {
-                            for &sample in data {
-                                let _ = writer.write_sample(sample);
+        let (stream, writer_thread) = match sample_format {
+            cpal::SampleFormat::F32 => {
+                let (sample_tx, sample_rx) = crossbeam_channel::unbounded::<Vec<f32>>();
+                let writer_inner = writer.clone();
+                let handle = std::thread::spawn(move || {
+                    while let Ok(data) = sample_rx.recv() {
+                        if let Ok(mut w) = writer_inner.lock() {
+                            if let Some(writer) = w.as_mut() {
+                                for &sample in &data {
+                                    let _ = writer.write_sample(sample);
+                                }
                             }
                         }
                     }
-                },
-                err_fn,
-                None,
-            ),
-            cpal::SampleFormat::I16 => device.build_input_stream(
-                &config,
-                move |data: &[i16], _: &_| {
-                    if let Ok(mut w) = writer_clone.lock() {
-                        if let Some(writer) = w.as_mut() {
-                            for &sample in data {
-                                let _ = writer.write_sample(sample);
+                });
+
+                let s = device.build_input_stream(
+                    &config,
+                    move |data: &[f32], _: &_| {
+                        let _ = sample_tx.send(data.to_vec());
+                    },
+                    err_fn,
+                    None,
+                );
+                (s, Some(handle))
+            }
+            cpal::SampleFormat::I16 => {
+                let (sample_tx, sample_rx) = crossbeam_channel::unbounded::<Vec<i16>>();
+                let writer_inner = writer.clone();
+                let handle = std::thread::spawn(move || {
+                    while let Ok(data) = sample_rx.recv() {
+                        if let Ok(mut w) = writer_inner.lock() {
+                            if let Some(writer) = w.as_mut() {
+                                for &sample in &data {
+                                    let _ = writer.write_sample(sample);
+                                }
                             }
                         }
                     }
-                },
-                err_fn,
-                None,
-            ),
-            cpal::SampleFormat::U16 => device.build_input_stream(
-                &config,
-                move |data: &[u16], _: &_| {
-                    if let Ok(mut w) = writer_clone.lock() {
-                        if let Some(writer) = w.as_mut() {
-                            for &sample in data {
-                                let _ = writer.write_sample((sample as i32 - 32768) as i16);
+                });
+
+                let s = device.build_input_stream(
+                    &config,
+                    move |data: &[i16], _: &_| {
+                        let _ = sample_tx.send(data.to_vec());
+                    },
+                    err_fn,
+                    None,
+                );
+                (s, Some(handle))
+            }
+            cpal::SampleFormat::U16 => {
+                let (sample_tx, sample_rx) = crossbeam_channel::unbounded::<Vec<u16>>();
+                let writer_inner = writer.clone();
+                let handle = std::thread::spawn(move || {
+                    while let Ok(data) = sample_rx.recv() {
+                        if let Ok(mut w) = writer_inner.lock() {
+                            if let Some(writer) = w.as_mut() {
+                                for &sample in &data {
+                                    let _ = writer.write_sample((sample as i32 - 32768) as i16);
+                                }
                             }
                         }
                     }
-                },
-                err_fn,
-                None,
-            ),
-            _ => return,
+                });
+
+                let s = device.build_input_stream(
+                    &config,
+                    move |data: &[u16], _: &_| {
+                        let _ = sample_tx.send(data.to_vec());
+                    },
+                    err_fn,
+                    None,
+                );
+                (s, Some(handle))
+            }
+            _ => (Err(cpal::BuildStreamError::DeviceNotAvailable), None),
         };
 
         if let Ok(stream) = stream {
             if stream.play().is_ok() {
                 let _ = rx.recv(); // Block until stop signal
             }
-            drop(stream);
+            drop(stream); // This drops sample_tx
+        }
+
+        // Wait for the background writer thread to write remaining samples
+        if let Some(handle) = writer_thread {
+            let _ = handle.join();
         }
 
         if let Ok(mut w) = writer.lock() {

@@ -519,36 +519,28 @@ fn spawn_screen_capture(
     let mut command = Command::new(&ffmpeg_exe);
     let capture_region = capture_region.map(normalize_capture_region);
 
-    command
-        .arg("-y")
-        .arg("-f")
-        .arg("gdigrab")
-        .arg("-framerate")
-        .arg("60")
-        .arg("-draw_mouse")
-        .arg("1");
-
+    let mut filter = String::from("ddagrab=framerate=60:draw_mouse=1");
     if let Some(region) = capture_region {
         if region.width <= 0 || region.height <= 0 {
             return Err("Capture region width and height must be greater than zero.".to_string());
         }
-
-        command
-            .arg("-offset_x")
-            .arg(region.x.to_string())
-            .arg("-offset_y")
-            .arg(region.y.to_string())
-            .arg("-video_size")
-            .arg(format!("{}x{}", region.width, region.height));
+        filter.push_str(&format!(
+            ":offset_x={}:offset_y={}:video_size={}x{}",
+            region.x, region.y, region.width, region.height
+        ));
     }
+    filter.push_str(",hwdownload,format=bgra");
 
     command
-        .arg("-i")
-        .arg("desktop")
+        .arg("-y")
+        .arg("-filter_complex")
+        .arg(&filter)
         .arg("-vcodec")
         .arg("libx264")
         .arg("-preset")
-        .arg("veryfast")
+        .arg("ultrafast")
+        .arg("-tune")
+        .arg("zerolatency")
         .arg("-pix_fmt")
         .arg("yuv420p")
         .arg(output_path)
