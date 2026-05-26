@@ -702,12 +702,20 @@ fn normalize_capture_region(region: RecordingRegion) -> RecordingRegion {
 
 fn stop_screen_capture(mut child: Child) -> Result<(), String> {
     if let Some(mut stdin) = child.stdin.take() {
-        send_ffmpeg_quit(&mut stdin)?;
+        if let Err(e) = send_ffmpeg_quit(&mut stdin) {
+            capture_log(&format!("Warning: send_ffmpeg_quit failed: {e}"));
+        }
     }
 
-    let status = child.wait().map_err(|e| format!("Failed to wait on ffmpeg: {e}"))?;
-    if !status.success() {
-        return Err(format!("ffmpeg exited with non-zero status: {status}"));
+    match child.wait() {
+        Ok(status) => {
+            if !status.success() {
+                capture_log(&format!("Warning: ffmpeg exited with non-zero status: {status}"));
+            }
+        }
+        Err(e) => {
+            capture_log(&format!("Warning: Failed to wait on ffmpeg: {e}"));
+        }
     }
     Ok(())
 }

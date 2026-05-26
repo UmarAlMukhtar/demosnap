@@ -515,7 +515,8 @@ function App() {
 
   return (
     <div className={`main-window-wrapper ${isSelectingRegion ? "transparent-bg" : "solid-bg"}`}>
-      <main className="app-shell">
+      {!isSelectingRegion ? (
+        <main className="app-shell">
         <aside className="sidebar" aria-label="Navigation">
           <div className="brand">Demosnap</div>
           <button
@@ -692,43 +693,44 @@ function App() {
             </div>
           )}
         </section>
-
-        {isSelectingRegion ? (
-          <div
-            className="region-overlay"
-            role="presentation"
-            onPointerDown={handleSelectionPointerDown}
-            onPointerMove={handleSelectionPointerMove}
-            onPointerUp={handleSelectionPointerUp}
-            onPointerCancel={cancelRegionSelection}
-          >
-            <div className="region-overlay-panel">
-              <p className="region-overlay-title">Drag to select the capture area</p>
-              <p className="region-overlay-copy">Release the mouse to begin recording that region.</p>
-              <button className="region-overlay-cancel" type="button" onClick={cancelRegionSelection}>
-                Cancel
-              </button>
-            </div>
-
-            {selectionRegion ? (
-              <div
-                className="region-selection-box"
-                style={{
-                  left: `${selectionRegion.x}px`,
-                  top: `${selectionRegion.y}px`,
-                  width: `${Math.max(selectionRegion.width, 1)}px`,
-                  height: `${Math.max(selectionRegion.height, 1)}px`,
-                }}
-                aria-hidden="true"
-              >
-                <span className="region-selection-label">
-                  {selectionRegion.width} x {selectionRegion.height}
-                </span>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
       </main>
+    ) : null}
+
+      {isSelectingRegion ? (
+        <div
+          className="region-overlay"
+          role="presentation"
+          onPointerDown={handleSelectionPointerDown}
+          onPointerMove={handleSelectionPointerMove}
+          onPointerUp={handleSelectionPointerUp}
+          onPointerCancel={cancelRegionSelection}
+        >
+          <div className="region-overlay-panel">
+            <p className="region-overlay-title">Drag to select the capture area</p>
+            <p className="region-overlay-copy">Release the mouse to begin recording that region.</p>
+            <button className="region-overlay-cancel" type="button" onClick={cancelRegionSelection}>
+              Cancel
+            </button>
+          </div>
+
+          {selectionRegion ? (
+            <div
+              className="region-selection-box"
+              style={{
+                left: `${selectionRegion.x}px`,
+                top: `${selectionRegion.y}px`,
+                width: `${Math.max(selectionRegion.width, 1)}px`,
+                height: `${Math.max(selectionRegion.height, 1)}px`,
+              }}
+              aria-hidden="true"
+            >
+              <span className="region-selection-label">
+                {selectionRegion.width} x {selectionRegion.height}
+              </span>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
