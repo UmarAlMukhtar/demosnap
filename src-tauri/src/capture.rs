@@ -364,7 +364,8 @@ pub fn stop(mut session: RecordingSession, raw_clicks: &[ClickEvent]) -> Result<
             std::fs::rename(part_path, &session.audio_path)
                 .map_err(|e| format!("Failed to rename audio part to audio.wav: {e}"))?;
         } else {
-            let _ = concat_files(&session.project_dir, &valid_audio_parts, &session.audio_path, "concat_audio.txt");
+            concat_files(&session.project_dir, &valid_audio_parts, &session.audio_path, "concat_audio.txt")
+                .map_err(|e| format!("Failed to concatenate audio parts: {e}"))?;
         }
     }
 
@@ -378,9 +379,11 @@ pub fn stop(mut session: RecordingSession, raw_clicks: &[ClickEvent]) -> Result<
     if !valid_sys_audio_parts.is_empty() {
         if valid_sys_audio_parts.len() == 1 {
             let part_path = &valid_sys_audio_parts[0];
-            let _ = std::fs::rename(part_path, &session.system_audio_path);
+            std::fs::rename(part_path, &session.system_audio_path)
+                .map_err(|e| format!("Failed to rename system audio part to system_audio.wav: {e}"))?;
         } else {
-            let _ = concat_files(&session.project_dir, &valid_sys_audio_parts, &session.system_audio_path, "concat_sys_audio.txt");
+            concat_files(&session.project_dir, &valid_sys_audio_parts, &session.system_audio_path, "concat_sys_audio.txt")
+                .map_err(|e| format!("Failed to concatenate system audio parts: {e}"))?;
         }
     }
 
@@ -699,10 +702,13 @@ fn normalize_capture_region(region: RecordingRegion) -> RecordingRegion {
 
 fn stop_screen_capture(mut child: Child) -> Result<(), String> {
     if let Some(mut stdin) = child.stdin.take() {
-        let _ = send_ffmpeg_quit(&mut stdin);
+        send_ffmpeg_quit(&mut stdin)?;
     }
 
-    let _ = child.wait();
+    let status = child.wait().map_err(|e| format!("Failed to wait on ffmpeg: {e}"))?;
+    if !status.success() {
+        return Err(format!("ffmpeg exited with non-zero status: {status}"));
+    }
     Ok(())
 }
 

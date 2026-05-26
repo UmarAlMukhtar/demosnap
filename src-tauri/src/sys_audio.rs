@@ -19,6 +19,10 @@ pub fn spawn_system_audio_capture(
         .map_err(|e| format!("Failed to get default output config: {e}"))?;
 
     let sample_format = config.sample_format();
+    match sample_format {
+        cpal::SampleFormat::F32 | cpal::SampleFormat::I16 | cpal::SampleFormat::U16 => {}
+        _ => return Err(format!("Unsupported sample format: {:?}", sample_format)),
+    }
     let config: cpal::StreamConfig = config.into();
 
     let spec = WavSpec {
@@ -27,6 +31,7 @@ pub fn spawn_system_audio_capture(
         bits_per_sample: if sample_format == cpal::SampleFormat::F32 { 32 } else { 16 },
         sample_format: if sample_format == cpal::SampleFormat::F32 { hound::SampleFormat::Float } else { hound::SampleFormat::Int },
     };
+
 
     let writer = WavWriter::create(output_path, spec)
         .map_err(|e| format!("Failed to create WavWriter: {e}"))?;

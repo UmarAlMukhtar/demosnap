@@ -401,6 +401,8 @@ function App() {
                 <span 
                   className={`control-mic-icon ${microphoneName ? "active" : "inactive"}`} 
                   title={microphoneName ? `Microphone: ${microphoneName}` : "No microphone detected (video-only)"}
+                  role="img"
+                  aria-label={microphoneName ? `Microphone: ${microphoneName}` : "No microphone detected (video-only)"}
                 >
                   {microphoneName ? "🎤" : "🔇"}
                 </span>
