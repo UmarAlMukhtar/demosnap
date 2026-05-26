@@ -2,6 +2,7 @@ mod capture;
 mod input;
 mod audio;
 mod sys_audio;
+mod export;
 
 use std::sync::Mutex;
 use tauri::State;
@@ -124,7 +125,9 @@ pub fn run() {
             stop_recording,
             pause_recording,
             resume_recording,
-            get_microphone_status
+            get_microphone_status,
+            export::select_export_path,
+            export::export_recording
         ])
         .run(tauri::generate_context!())
         .expect("error while running demosnap");

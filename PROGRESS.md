@@ -2,21 +2,20 @@
 
 This document tracks implementation progress against TIMELINE.md and REQUIREMENTS.md. Updated regularly to reflect current state.
 
-**Current Updated:** 2026-05-26  
-**Current Milestone:** M1 — MVP Recording & Export  
-**Current Phase:** Phase 1.3 — Basic Export
+**Current Milestone:** M1 — MVP Recording & Export (Phase 1.1, 1.2, & 1.3 Complete)  
+**Current Phase:** Phase 2.1 — Cursor Smoothing & Replacement
 
 ---
 
 ## Overall Progress
 
 ```
-M1 (Months 1–3)    █████████████░░░░░░░░░░░░░░ ~50%
+M1 (Months 1–3)    ████████████████████████████ 100%
 M2 (Months 4–6)    ░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 0%
 M3 (Months 7–9)    ░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 0%
 M4 (Months 10–12)  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 0%
  
-TOTAL V1.0         ███░░░░░░░░░░░░░░░░░░░░░░░░░ ~12%
+TOTAL V1.0         ████████░░░░░░░░░░░░░░░░░░░░ ~25%
 ```
 
 ---
@@ -24,7 +23,7 @@ TOTAL V1.0         ███░░░░░░░░░░░░░░░░░�
 ## Milestone 1: MVP Recording & Export (M1)
 
 **Target:** Month 3 | **Current Estimate:** On track  
-**Overall Progress:** 50%
+**Overall Progress:** 100%
 
 ### Phase 1.1: Core Recording
 
@@ -85,19 +84,18 @@ TOTAL V1.0         ███░░░░░░░░░░░░░░░░░�
 ---
 
 ### Phase 1.3: Basic Export
-
-**Target:** Weeks 9–12 | **Status:** ❌ NOT STARTED
-
-| Requirement | Task | Status |
-|---|---|---|
-| EXP-01 | Export as MP4 (H.264) | ❌ NOT STARTED |
-| EXP-02 | Support 1080p export | ❌ NOT STARTED |
-| EXP-03 | Support 30fps, 60fps export | ❌ NOT STARTED |
-| EXP-04 | Show export progress + ETA | ❌ NOT STARTED |
-
+ 
+**Target:** Weeks 9–12 | **Status:** ✅ DONE (Week ~3)
+ 
+| Requirement | Task | Status | Notes |
+|---|---|---|---|
+| EXP-01 | Export as MP4 (H.264) | ✅ DONE | Direct copy or FFmpeg transcoding to MP4 target |
+| EXP-02 | Support 1080p export | ✅ DONE | 1080p scale with letterbox/pillarbox padding to preserve aspect ratio |
+| EXP-03 | Support 30fps, 60fps export | ✅ DONE | Transcodes frame rate to 30fps or 60fps based on selector |
+| EXP-04 | Show export progress + ETA | ✅ DONE | Backend parses FFmpeg output and emits progress to React progress bar |
+ 
 **Blockers:**
-- Phase 1.1 recording must work first
-- FFmpeg integration via `ffmpeg-next` TBD
+- None
 
 ---
 
@@ -151,10 +149,13 @@ All phases blocked on M3 completion.
 - System audio capture natively via `cpal` + `hound` WASAPI loopback with automatic default playback endpoint discovery
 - Audio pause/resume/stop segments synchronization and concatenation
 - Active microphone name and status indicator display in React UI
+- Basic export pipeline with 1080p letterbox conversion and 30/60fps framerate adjustment
+- Native save dialog using RFD (Rust File Dialogs)
+- Real-time progress bar tracking FFmpeg transcode progress
 
 ### What's Stubbed 🟡
-- Export pipeline: Video + audio muxing (Phase 1.3)
-
+- None
+ 
 ### What's Missing ❌
 - **Error handling** — No graceful failures for missing disk space, etc.
 
